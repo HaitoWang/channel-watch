@@ -1,6 +1,9 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
 
-import { http } from "../shared/api/http";
+import { channelsApi } from "../shared/api/channels";
+import { eventsApi } from "../shared/api/events";
+import { radarApi } from "../shared/api/radar";
+import { settingsApi } from "../shared/api/settings";
 import {
   CHANNEL_REFRESH_MS,
   MONITOR_REFRESH_MS,
@@ -72,16 +75,7 @@ export function useRadarController() {
       setFormMessage("");
     }
     const [channelsPayload, openEventsPayload, allEventsPayload, historyPayload, usagePayload, ratesPayload, monitorPayload, settingsPayload] =
-      await Promise.all([
-        http<AnyRecord>("/api/channels"),
-        http<AnyRecord>("/api/events"),
-        http<AnyRecord>("/api/events?ack=all"),
-        http<AnyRecord>("/api/history?limit=160"),
-        http<AnyRecord>("/api/usage"),
-        http<AnyRecord>("/api/rates"),
-        http<AnyRecord>("/api/monitor"),
-        http<AnyRecord>("/api/settings"),
-      ]);
+      await radarApi.snapshot();
 
     const nextState: typeof initialRadarState = {
       channels: channelsPayload.channels || [],
@@ -115,7 +109,7 @@ export function useRadarController() {
 
   async function refreshMonitorRoom({ quiet = true } = {}) {
     if (!quiet) setMonitorLogMessage("");
-    const [monitorPayload, historyPayload] = await Promise.all([http<AnyRecord>("/api/monitor"), http<AnyRecord>("/api/history?limit=160")]);
+    const [monitorPayload, historyPayload] = await radarApi.monitorRoom();
     setRadar((previous) => ({
       ...previous,
       monitor: { summary: monitorPayload.summary || {}, channels: monitorPayload.channels || [] },
@@ -148,7 +142,7 @@ export function useRadarController() {
   async function probeChannel(id: number, suffix: string) {
     setLoadingIds((previous) => new Set(previous).add(id));
     try {
-      await http(`/api/channels/${id}${suffix}`, { method: "POST", body: "{}" });
+      await channelsApi.probe(id, suffix);
       await loadRadar({ quiet: true });
       return true;
     } catch (error) {
@@ -167,7 +161,7 @@ export function useRadarController() {
   async function syncKeys(id: number) {
     setLoadingIds((previous) => new Set(previous).add(id));
     try {
-      await http(`/api/channels/${id}/sync-keys`, { method: "POST", body: "{}" });
+      await channelsApi.syncKeys(id);
       await loadRadar({ quiet: true });
     } catch (error) {
       notify((error as Error).message);
@@ -182,10 +176,7 @@ export function useRadarController() {
 
   async function toggleMonitor(channel: AnyRecord) {
     try {
-      await http(`/api/channels/${channel.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ is_monitoring: !boolField(channel, "is_monitoring", "isMonitoring") }),
-      });
+      await channelsApi.update(channel.id, { is_monitoring: !boolField(channel, "is_monitoring", "isMonitoring") });
       await loadRadar({ quiet: true });
     } catch (error) {
       notify((error as Error).message);
@@ -194,7 +185,7 @@ export function useRadarController() {
 
   async function setDefaultKey(id: number) {
     try {
-      await http(`/api/channels/${id}/set-default`, { method: "POST", body: "{}" });
+      await channelsApi.setDefault(id);
       await loadRadar({ quiet: true });
     } catch (error) {
       notify((error as Error).message);
@@ -204,7 +195,7 @@ export function useRadarController() {
   async function probeModelChannel(id: number) {
     setLoadingIds((previous) => new Set(previous).add(id));
     try {
-      await http(`/api/channels/${id}/monitor/probe`, { method: "POST", body: "{}" });
+      await channelsApi.probeModel(id);
       await loadRadar({ quiet: true });
     } catch (error) {
       notify((error as Error).message);
@@ -219,7 +210,7 @@ export function useRadarController() {
 
   async function ackEvent(id: number) {
     try {
-      await http(`/api/events/${id}/ack`, { method: "POST", body: "{}" });
+      await eventsApi.ack(id);
       await loadRadar({ quiet: true });
     } catch (error) {
       notify((error as Error).message);
@@ -228,7 +219,7 @@ export function useRadarController() {
 
   async function ackAllEvents() {
     try {
-      await http("/api/events/ack-all", { method: "POST", body: "{}" });
+      await eventsApi.ackAll();
       await loadRadar({ quiet: true });
     } catch (error) {
       notify((error as Error).message);
@@ -243,7 +234,7 @@ export function useRadarController() {
       for (const id of ids) {
         setLoadingIds((previous) => new Set(previous).add(id));
         try {
-          await http(`/api/channels/${id}/probe-groups`, { method: "POST", body: "{}" });
+          await channelsApi.probeGroups(id);
         } catch (error) {
           notify((error as Error).message);
         } finally {
@@ -313,9 +304,9 @@ export function useRadarController() {
     }
     setKeyMessage("保存中...");
     try {
-      await http(`/api/channels/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+      await channelsApi.update(id, payload);
       if (keyModal.draft.is_default_key && !keyModal.wasDefault) {
-        await http(`/api/channels/${id}/set-default`, { method: "POST", body: "{}" });
+        await channelsApi.setDefault(id);
       }
       await loadRadar({ quiet: true });
       setKeyModal(null);
@@ -341,7 +332,7 @@ export function useRadarController() {
       });
       setFormMessage("保存中...");
       try {
-        await http(`/api/channels/${channelModal.channel.id}`, { method: "PATCH", body: JSON.stringify(payload) });
+        await channelsApi.update(channelModal.channel.id, payload);
         await loadRadar({ quiet: true });
         setChannelModal(null);
       } catch (error) {
@@ -351,11 +342,11 @@ export function useRadarController() {
     }
     setFormMessage("保存中...");
     try {
-      const created = await http<AnyRecord>("/api/channels", { method: "POST", body: JSON.stringify(payload) });
+      const created = await channelsApi.create(payload);
       setFormMessage("已保存，正在同步 Key 和分组...");
       try {
         const syncPayload = payload.turnstile_token ? { turnstile_token: payload.turnstile_token } : {};
-        await http(`/api/channels/${created.channel.id}/sync-keys`, { method: "POST", body: JSON.stringify(syncPayload) });
+        await channelsApi.syncKeys(created.channel.id, syncPayload);
       } catch (error) {
         notify(`Key 同步失败: ${(error as Error).message}`);
       }
@@ -379,7 +370,7 @@ export function useRadarController() {
     if (!window.confirm(`确定删除渠道「${channel.name || id}」${suffix} 吗？`)) return;
     setLoadingIds((previous) => new Set(previous).add(id));
     try {
-      await http(`/api/channels/${id}`, { method: "DELETE" });
+      await channelsApi.remove(id);
       await loadRadar({ quiet: true });
     } catch (error) {
       notify((error as Error).message);
@@ -396,7 +387,7 @@ export function useRadarController() {
     event.preventDefault();
     setSettingsMessage("保存中...");
     try {
-      const result = await http<AnyRecord>("/api/settings", { method: "PATCH", body: JSON.stringify(settingsPayloadFromDraft(settingsDraft)) });
+      const result = await settingsApi.update(settingsPayloadFromDraft(settingsDraft));
       setRadar((previous) => ({ ...previous, settings: result.settings || {} }));
       setSettingsDraft(settingsFromBackend(result.settings || {}));
       setSettingsMessage("已保存");
@@ -408,7 +399,7 @@ export function useRadarController() {
   async function testNotification() {
     setSettingsMessage("发送中...");
     try {
-      const result = await http<AnyRecord>("/api/settings/test-notification", { method: "POST", body: JSON.stringify(settingsPayloadFromDraft(settingsDraft)) });
+      const result = await settingsApi.testNotification(settingsPayloadFromDraft(settingsDraft));
       setSettingsMessage(result.message || "测试通知已发送");
     } catch (error) {
       setSettingsMessage((error as Error).message);
