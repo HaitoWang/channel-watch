@@ -1,0 +1,14 @@
+{
+  "name": "channel-watch-workspace",
+  "private": true,
+  "workspaces": [
+    "apps/web",
+    "packages/contracts"
+  ],
+  "scripts": {
+    "api:dev": "python3 -m apps.api.app.main --host 127.0.0.1 --port 4176",
+    "web:dev": "npm --workspace apps/web run dev",
+    "web:build": "npm --workspace apps/web run build",
+    "web:preview": "npm --workspace apps/web run preview"
+  }
+}

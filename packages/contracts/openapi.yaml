@@ -1,0 +1,58 @@
+openapi: 3.1.0
+info:
+  title: Channel Radar API
+  version: 0.1.0
+paths:
+  /api/health:
+    get:
+      summary: Health check
+      responses:
+        "200":
+          description: Health response
+  /api/channels:
+    get:
+      summary: List channels and parent accounts
+      responses:
+        "200":
+          description: Channel list response
+  /api/monitor:
+    get:
+      summary: List monitored keys and probe results
+      responses:
+        "200":
+          description: Monitor summary response
+  /api/events:
+    get:
+      summary: List alert events
+      responses:
+        "200":
+          description: Event list response
+  /api/history:
+    get:
+      summary: List probe and alert history
+      responses:
+        "200":
+          description: History response
+  /api/usage:
+    get:
+      summary: Usage summary
+      responses:
+        "200":
+          description: Usage response
+  /api/rates:
+    get:
+      summary: Rate summary
+      responses:
+        "200":
+          description: Rate response
+  /api/settings:
+    get:
+      summary: Read notification settings
+      responses:
+        "200":
+          description: Settings response
+    patch:
+      summary: Update notification settings
+      responses:
+        "200":
+          description: Updated settings response
