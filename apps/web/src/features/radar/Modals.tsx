@@ -4,19 +4,25 @@ import type { AnyRecord } from './types';
 import { monitorDisplayName } from './utils';
 
 export function ChannelModal({
+  channelModal,
   message,
   onClose,
   onSubmit,
 }: {
+  channelModal: { mode: "create" } | { mode: "edit"; channel: AnyRecord };
   message: string;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const channel = channelModal.mode === "edit" ? channelModal.channel : {};
+  const isEdit = channelModal.mode === "edit";
+  const apiKeyMasked = channel.api_key_masked || channel.apiKeyMasked || channel.key_masked || channel.keyMasked;
+  const accessTokenHint = channel.has_access_token || channel.hasAccessToken ? "已配置，留空则不修改" : "账号同步/余额查询使用";
   return (
     <div className="modal-backdrop" id="channelModal" onMouseDown={(event) => event.currentTarget === event.target && onClose()}>
       <section className="modal-panel" role="dialog" aria-modal="true" aria-labelledby="channelModalTitle">
         <div className="modal-head">
-          <h2 id="channelModalTitle">新建渠道</h2>
+          <h2 id="channelModalTitle">{isEdit ? "编辑渠道" : "新建渠道"}</h2>
           <button className="icon-button" type="button" aria-label="关闭" onClick={onClose}>
             ×
           </button>
@@ -24,61 +30,61 @@ export function ChannelModal({
         <form id="channelForm" className="channel-form" onSubmit={onSubmit}>
           <label>
             <span>渠道名称</span>
-            <input name="name" required placeholder="Production Router" autoComplete="off" />
+            <input name="name" required placeholder="Production Router" autoComplete="off" defaultValue={channel.name || ""} />
           </label>
           <label>
             <span>平台</span>
-            <select name="platform" required defaultValue="sub2Api">
+            <select name="platform" required defaultValue={channel.platform || "sub2Api"}>
               <option value="sub2Api">sub2Api</option>
               <option value="newApi">newApi</option>
             </select>
           </label>
           <label className="span-2">
             <span>Base URL</span>
-            <input name="base_url" required placeholder="https://api.example.com" autoComplete="off" />
+            <input name="base_url" required placeholder="https://api.example.com" autoComplete="off" defaultValue={channel.base_url || channel.baseUrl || ""} />
           </label>
           <label>
             <span>API Key</span>
-            <input name="api_key" type="password" placeholder="手动添加单个 Key 时填写" autoComplete="off" />
+            <input name="api_key" type="password" placeholder={isEdit && apiKeyMasked ? `已配置: ${apiKeyMasked}` : "手动添加单个 Key 时填写"} autoComplete="off" />
           </label>
           <label>
             <span>accessToken</span>
-            <input name="access_token" type="password" placeholder="账号同步/余额查询使用" autoComplete="off" />
+            <input name="access_token" type="password" placeholder={accessTokenHint} autoComplete="off" />
           </label>
           <label>
             <span>refreshToken</span>
-            <input name="refresh_token" type="password" placeholder="sub2Api 自动刷新登录" autoComplete="off" />
+            <input name="refresh_token" type="password" placeholder={isEdit ? "留空则不修改" : "sub2Api 自动刷新登录"} autoComplete="off" />
           </label>
           <label>
             <span>账号邮箱</span>
-            <input name="email" type="email" placeholder="sub2Api 登录邮箱" autoComplete="off" />
+            <input name="email" type="email" placeholder="sub2Api 登录邮箱" autoComplete="off" defaultValue={channel.email || ""} />
           </label>
           <label>
             <span>登录密码</span>
-            <input name="password" type="password" placeholder="sub2Api 登录密码" autoComplete="off" />
+            <input name="password" type="password" placeholder={isEdit ? "留空则不修改" : "sub2Api 登录密码"} autoComplete="off" />
           </label>
           <label>
             <span>userId</span>
-            <input name="user_id" placeholder="newApi 必填" autoComplete="off" />
+            <input name="user_id" placeholder="newApi 必填" autoComplete="off" defaultValue={channel.user_id || channel.userId || ""} />
           </label>
           <label>
             <span>预警阈值</span>
-            <input name="threshold" type="number" step="0.01" defaultValue="10" min="0" />
+            <input name="threshold" type="number" step="0.01" defaultValue={channel.threshold ?? "10"} min="0" />
           </label>
           <label>
             <span>分组 ID</span>
-            <input name="group_id" placeholder="可选" autoComplete="off" />
+            <input name="group_id" placeholder="可选" autoComplete="off" defaultValue={channel.group_id || channel.groupId || ""} />
           </label>
           <label>
             <span>模型范围</span>
-            <input name="model_scope" defaultValue="All models" autoComplete="off" />
+            <input name="model_scope" defaultValue={channel.model_scope || channel.modelScope || "All models"} autoComplete="off" />
           </label>
           <label className="span-2">
             <span>登录校验 Token</span>
-            <input name="turnstile_token" type="password" placeholder="sub2Api 登录校验可选" autoComplete="off" />
+            <input name="turnstile_token" type="password" placeholder={isEdit ? "重新登录时可填" : "sub2Api 登录校验可选"} autoComplete="off" />
           </label>
           <label className="check-row span-2">
-            <input name="is_demo" type="checkbox" />
+            <input name="is_demo" type="checkbox" defaultChecked={Boolean(channel.is_demo ?? channel.isDemo)} />
             <span>演示探测</span>
           </label>
           <div className="modal-actions span-2">
@@ -87,7 +93,7 @@ export function ChannelModal({
               取消
             </button>
             <button className="primary-button" type="submit">
-              保存并探测
+              {isEdit ? "保存修改" : "保存并探测"}
             </button>
           </div>
         </form>

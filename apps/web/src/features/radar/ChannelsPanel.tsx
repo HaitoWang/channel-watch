@@ -13,6 +13,8 @@ export function ChannelsPanel({
   onToggleExpand,
   onProbe,
   onSyncKeys,
+  onEditChannel,
+  onDeleteChannel,
   onToggleMonitor,
   onEditKey,
   onSetDefault,
@@ -27,6 +29,8 @@ export function ChannelsPanel({
   onToggleExpand: (id: number) => void;
   onProbe: (id: number) => void;
   onSyncKeys: (id: number) => void;
+  onEditChannel: (channel: AnyRecord) => void;
+  onDeleteChannel: (channel: AnyRecord) => void;
   onToggleMonitor: (channel: AnyRecord) => void;
   onEditKey: (channel: AnyRecord) => void;
   onSetDefault: (id: number) => void;
@@ -67,6 +71,8 @@ export function ChannelsPanel({
               loadingIds={loadingIds}
               onProbe={onProbe}
               onSyncKeys={onSyncKeys}
+              onEditChannel={onEditChannel}
+              onDeleteChannel={onDeleteChannel}
               onToggleExpand={onToggleExpand}
               onToggleMonitor={onToggleMonitor}
               onEditKey={onEditKey}
@@ -89,6 +95,8 @@ function AccountRow({
   loadingIds,
   onProbe,
   onSyncKeys,
+  onEditChannel,
+  onDeleteChannel,
   onToggleExpand,
   onToggleMonitor,
   onEditKey,
@@ -101,6 +109,8 @@ function AccountRow({
   loadingIds: Set<number>;
   onProbe: (id: number) => void;
   onSyncKeys: (id: number) => void;
+  onEditChannel: (channel: AnyRecord) => void;
+  onDeleteChannel: (channel: AnyRecord) => void;
   onToggleExpand: (id: number) => void;
   onToggleMonitor: (channel: AnyRecord) => void;
   onEditKey: (channel: AnyRecord) => void;
@@ -146,6 +156,12 @@ function AccountRow({
         <button className="ghost-button" type="button" disabled={loading} onClick={() => onSyncKeys(id)}>
           <span className="icon icon-sync" aria-hidden="true"></span>
           {loading ? "同步中" : "同步 Key"}
+        </button>
+        <button className="ghost-button" type="button" onClick={() => onEditChannel(account)}>
+          编辑
+        </button>
+        <button className="ghost-button danger" type="button" disabled={loading} onClick={() => onDeleteChannel(account)}>
+          删除
         </button>
         <button className="ghost-button" type="button" aria-label={expanded ? "收起" : "展开"} onClick={() => onToggleExpand(id)}>
           {expanded ? "收起" : "展开"}

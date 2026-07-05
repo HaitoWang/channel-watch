@@ -1620,6 +1620,15 @@ button:disabled {
   color: rgba(255, 255, 255, 0.62);
 }
 
+.ghost-button.danger {
+  color: #ff9cac;
+}
+
+.ghost-button.danger:hover {
+  border-color: rgba(255, 86, 117, 0.58);
+  color: #fff;
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;
