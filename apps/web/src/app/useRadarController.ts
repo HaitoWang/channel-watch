@@ -1,25 +1,23 @@
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
-import { channelsApi } from "../shared/api/channels";
-import { eventsApi } from "../shared/api/events";
 import { radarApi } from "../shared/api/radar";
-import { settingsApi } from "../shared/api/settings";
+import { useAutoRefresh } from "./hooks/useAutoRefresh";
+import { useModals } from "./hooks/useModals";
+import { useRadarActions } from "./hooks/useRadarActions";
+import { useSettingsForm } from "./hooks/useSettingsForm";
 import {
-  CHANNEL_REFRESH_MS,
-  MONITOR_REFRESH_MS,
   type AnyRecord,
-  boolField,
   initialRadarState,
   initialView,
-  isDefaultModelList,
-  providerDefaultModels,
-  settingsFromBackend,
-  settingsPayloadFromDraft,
-  splitModels,
   viewMeta,
   type ViewName,
 } from "./radarModel";
 
+/**
+ * Composition root for the radar dashboard: owns the core snapshot/filter/UI
+ * state and the shared `notify`/`loadRadar` glue, then wires the focused hooks
+ * (modals, auto-refresh, settings form, async actions) into a single view model.
+ */
 export function useRadarController() {
   const [radar, setRadar] = useState(initialRadarState);
   const [view, setViewState] = useState<ViewName>(initialView);
@@ -30,40 +28,28 @@ export function useRadarController() {
   const [loadingIds, setLoadingIds] = useState<Set<number>>(new Set());
   const [syncingRates, setSyncingRates] = useState(false);
   const [toast, setToast] = useState("");
-  const [channelModal, setChannelModal] = useState<{ mode: "create" } | { mode: "edit"; channel: AnyRecord } | null>(null);
-  const [keyModal, setKeyModal] = useState<{ channel: AnyRecord; draft: AnyRecord; wasDefault: boolean } | null>(null);
-  const [monitorLog, setMonitorLog] = useState<AnyRecord | null>(null);
-  const [settingsDraft, setSettingsDraft] = useState(settingsFromBackend({}));
-  const [formMessage, setFormMessage] = useState("");
-  const [keyMessage, setKeyMessage] = useState("");
-  const [settingsMessage, setSettingsMessage] = useState("");
-  const [monitorLogMessage, setMonitorLogMessage] = useState("");
-  const [monitorRefreshInFlight, setMonitorRefreshInFlight] = useState(false);
-  const [channelRefreshInFlight, setChannelRefreshInFlight] = useState(false);
-  const [nextMonitorRefreshAt, setNextMonitorRefreshAt] = useState(Date.now() + MONITOR_REFRESH_MS);
-  const [nextChannelRefreshAt, setNextChannelRefreshAt] = useState(Date.now() + CHANNEL_REFRESH_MS);
-  const [now, setNow] = useState(Date.now());
-  const lastSettingsUpdated = useRef<string | undefined>(undefined);
+
+  const modals = useModals();
 
   const meta = viewMeta[view] || viewMeta.overview;
   const isMonitor = view === "monitor";
 
   const notify = (text: string) => {
     if (!text) return;
-    if (monitorLog) {
-      setMonitorLogMessage(text);
+    if (modals.monitorLog) {
+      modals.setMonitorLogMessage(text);
       return;
     }
-    if (keyModal) {
-      setKeyMessage(text);
+    if (modals.keyModal) {
+      modals.setKeyMessage(text);
       return;
     }
-    if (channelModal) {
-      setFormMessage(text);
+    if (modals.channelModal) {
+      modals.setFormMessage(text);
       return;
     }
     if (view === "settings") {
-      setSettingsMessage(text);
+      modals.setSettingsMessage(text);
       return;
     }
     setToast(text);
@@ -72,7 +58,7 @@ export function useRadarController() {
 
   async function loadRadar({ quiet = false } = {}) {
     if (!quiet) {
-      setFormMessage("");
+      modals.setFormMessage("");
     }
     const [channelsPayload, openEventsPayload, allEventsPayload, historyPayload, usagePayload, ratesPayload, monitorPayload, settingsPayload] =
       await radarApi.snapshot();
@@ -108,7 +94,7 @@ export function useRadarController() {
   }
 
   async function refreshMonitorRoom({ quiet = true } = {}) {
-    if (!quiet) setMonitorLogMessage("");
+    if (!quiet) modals.setMonitorLogMessage("");
     const [monitorPayload, historyPayload] = await radarApi.monitorRoom();
     setRadar((previous) => ({
       ...previous,
@@ -117,294 +103,38 @@ export function useRadarController() {
     }));
   }
 
-  async function refreshMonitorFromHeader() {
-    setMonitorRefreshInFlight(true);
-    try {
-      await refreshMonitorRoom({ quiet: true });
-      setNextMonitorRefreshAt(Date.now() + MONITOR_REFRESH_MS);
-    } catch (error) {
-      notify((error as Error).message);
-    } finally {
-      setMonitorRefreshInFlight(false);
-    }
-  }
+  const autoRefresh = useAutoRefresh({
+    view,
+    blockChannelRefresh: Boolean(modals.channelModal || modals.keyModal || modals.monitorLog),
+    loadRadar,
+    refreshMonitorRoom,
+    notify,
+  });
 
   function setView(nextView: ViewName, push = true) {
     if (!viewMeta[nextView]) return;
     setViewState(nextView);
     if (push) window.location.hash = nextView;
     if (nextView === "monitor") {
-      setNextMonitorRefreshAt(Date.now() + MONITOR_REFRESH_MS);
-      void refreshMonitorFromHeader();
+      autoRefresh.scheduleMonitorRefresh();
+      void autoRefresh.refreshMonitorFromHeader();
     }
   }
 
-  async function probeChannel(id: number, suffix: string) {
-    setLoadingIds((previous) => new Set(previous).add(id));
-    try {
-      await channelsApi.probe(id, suffix);
-      await loadRadar({ quiet: true });
-      return true;
-    } catch (error) {
-      notify((error as Error).message);
-      await loadRadar({ quiet: true }).catch(() => {});
-      return false;
-    } finally {
-      setLoadingIds((previous) => {
-        const next = new Set(previous);
-        next.delete(id);
-        return next;
-      });
-    }
-  }
+  const settingsForm = useSettingsForm({
+    settings: radar.settings,
+    setRadar,
+    setSettingsMessage: modals.setSettingsMessage,
+  });
 
-  async function syncKeys(id: number) {
-    setLoadingIds((previous) => new Set(previous).add(id));
-    try {
-      await channelsApi.syncKeys(id);
-      await loadRadar({ quiet: true });
-    } catch (error) {
-      notify((error as Error).message);
-    } finally {
-      setLoadingIds((previous) => {
-        const next = new Set(previous);
-        next.delete(id);
-        return next;
-      });
-    }
-  }
-
-  async function toggleMonitor(channel: AnyRecord) {
-    try {
-      await channelsApi.update(channel.id, { is_monitoring: !boolField(channel, "is_monitoring", "isMonitoring") });
-      await loadRadar({ quiet: true });
-    } catch (error) {
-      notify((error as Error).message);
-    }
-  }
-
-  async function setDefaultKey(id: number) {
-    try {
-      await channelsApi.setDefault(id);
-      await loadRadar({ quiet: true });
-    } catch (error) {
-      notify((error as Error).message);
-    }
-  }
-
-  async function probeModelChannel(id: number) {
-    setLoadingIds((previous) => new Set(previous).add(id));
-    try {
-      await channelsApi.probeModel(id);
-      await loadRadar({ quiet: true });
-    } catch (error) {
-      notify((error as Error).message);
-    } finally {
-      setLoadingIds((previous) => {
-        const next = new Set(previous);
-        next.delete(id);
-        return next;
-      });
-    }
-  }
-
-  async function ackEvent(id: number) {
-    try {
-      await eventsApi.ack(id);
-      await loadRadar({ quiet: true });
-    } catch (error) {
-      notify((error as Error).message);
-    }
-  }
-
-  async function ackAllEvents() {
-    try {
-      await eventsApi.ackAll();
-      await loadRadar({ quiet: true });
-    } catch (error) {
-      notify((error as Error).message);
-    }
-  }
-
-  async function syncAllRates() {
-    const ids = radar.channels.filter((channel) => channel.is_enabled ?? channel.isEnabled).map((channel) => Number(channel.id));
-    if (!ids.length) return;
-    setSyncingRates(true);
-    try {
-      for (const id of ids) {
-        setLoadingIds((previous) => new Set(previous).add(id));
-        try {
-          await channelsApi.probeGroups(id);
-        } catch (error) {
-          notify((error as Error).message);
-        } finally {
-          setLoadingIds((previous) => {
-            const next = new Set(previous);
-            next.delete(id);
-            return next;
-          });
-        }
-      }
-      await loadRadar({ quiet: true });
-    } finally {
-      setSyncingRates(false);
-    }
-  }
-
-  function openKeyModal(channel: AnyRecord) {
-    const models = channel.monitor_models || channel.monitorModels || [];
-    const provider = channel.key_provider || channel.keyProvider || "";
-    setKeyMessage("");
-    setKeyModal({
-      channel,
-      wasDefault: boolField(channel, "is_default_key", "isDefaultKey"),
-      draft: {
-        name: channel.name || "",
-        key_provider: provider,
-        monitor_interval_seconds: channel.monitor_interval_seconds || channel.monitorIntervalSeconds || 60,
-        monitor_models: models.join(", ") || providerDefaultModels(provider).join(", "),
-        is_enabled: boolField(channel, "is_enabled", "isEnabled"),
-        is_monitoring: boolField(channel, "is_monitoring", "isMonitoring"),
-        is_default_key: boolField(channel, "is_default_key", "isDefaultKey"),
-        disable_on_rate_multiplier_change: boolField(channel, "disable_on_rate_multiplier_change", "disableOnRateMultiplierChange"),
-        disable_on_model_sync_failure: boolField(channel, "disable_on_model_sync_failure", "disableOnModelSyncFailure"),
-      },
-    });
-  }
-
-  function updateKeyDraft(patch: AnyRecord) {
-    setKeyModal((current) => {
-      if (!current) return current;
-      const nextDraft = { ...current.draft, ...patch };
-      if (patch.key_provider !== undefined && isDefaultModelList(current.draft.monitor_models)) {
-        nextDraft.monitor_models = providerDefaultModels(patch.key_provider).join(", ");
-      }
-      return { ...current, draft: nextDraft };
-    });
-  }
-
-  async function submitKeyForm(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!keyModal) return;
-    const id = Number(keyModal.channel.id);
-    const provider = keyModal.draft.key_provider || null;
-    const payload = {
-      name: String(keyModal.draft.name || "").trim(),
-      key_provider: provider,
-      monitor_models: splitModels(keyModal.draft.monitor_models || providerDefaultModels(provider).join(",")),
-      monitor_interval_seconds: Number(keyModal.draft.monitor_interval_seconds || 60),
-      is_enabled: Boolean(keyModal.draft.is_enabled),
-      is_monitoring: Boolean(keyModal.draft.is_monitoring),
-      disable_on_rate_multiplier_change: Boolean(keyModal.draft.disable_on_rate_multiplier_change),
-      disable_on_model_sync_failure: Boolean(keyModal.draft.disable_on_model_sync_failure),
-    };
-    if (!payload.name) {
-      setKeyMessage("Key 名称不能为空");
-      return;
-    }
-    setKeyMessage("保存中...");
-    try {
-      await channelsApi.update(id, payload);
-      if (keyModal.draft.is_default_key && !keyModal.wasDefault) {
-        await channelsApi.setDefault(id);
-      }
-      await loadRadar({ quiet: true });
-      setKeyModal(null);
-    } catch (error) {
-      setKeyMessage((error as Error).message);
-    }
-  }
-
-  async function submitChannel(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const formData = new FormData(form);
-    const payload: AnyRecord = Object.fromEntries(formData.entries());
-    payload.threshold = Number(payload.threshold || 10);
-    payload.is_enabled = formData.get("is_enabled") === "on";
-    payload.is_demo = formData.get("is_demo") === "on";
-    payload.disable_on_rate_multiplier_change = formData.get("disable_on_rate_multiplier_change") === "on";
-    payload.disable_on_model_sync_failure = formData.get("disable_on_model_sync_failure") === "on";
-    if (!String(payload.source_channel_id || "").trim()) delete payload.source_channel_id;
-    if (channelModal?.mode === "edit") {
-      ["api_key", "access_token", "refresh_token", "password", "turnstile_token"].forEach((key) => {
-        if (!String(payload[key] || "").trim()) delete payload[key];
-      });
-      setFormMessage("保存中...");
-      try {
-        await channelsApi.update(channelModal.channel.id, payload);
-        await loadRadar({ quiet: true });
-        setChannelModal(null);
-      } catch (error) {
-        setFormMessage((error as Error).message);
-      }
-      return;
-    }
-    setFormMessage("保存中...");
-    try {
-      const created = await channelsApi.create(payload);
-      setFormMessage("已保存，正在同步 Key 和分组...");
-      try {
-        const syncPayload = payload.turnstile_token ? { turnstile_token: payload.turnstile_token } : {};
-        await channelsApi.syncKeys(created.channel.id, syncPayload);
-      } catch (error) {
-        notify(`Key 同步失败: ${(error as Error).message}`);
-      }
-      await loadRadar({ quiet: true });
-      if (payload.is_demo || payload.api_key) {
-        setFormMessage("已保存，正在首次探测...");
-        await probeChannel(created.channel.id, "/probe");
-      }
-      setChannelModal(null);
-      form.reset();
-    } catch (error) {
-      setFormMessage((error as Error).message);
-    }
-  }
-
-  async function deleteChannel(channel: AnyRecord) {
-    const id = Number(channel.id);
-    if (!id) return;
-    const children = channel.children || [];
-    const suffix = children.length ? `及 ${children.length} 个子 Key` : "";
-    if (!window.confirm(`确定删除渠道「${channel.name || id}」${suffix} 吗？`)) return;
-    setLoadingIds((previous) => new Set(previous).add(id));
-    try {
-      await channelsApi.remove(id);
-      await loadRadar({ quiet: true });
-    } catch (error) {
-      notify((error as Error).message);
-    } finally {
-      setLoadingIds((previous) => {
-        const next = new Set(previous);
-        next.delete(id);
-        return next;
-      });
-    }
-  }
-
-  async function submitSettings(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setSettingsMessage("保存中...");
-    try {
-      const result = await settingsApi.update(settingsPayloadFromDraft(settingsDraft));
-      setRadar((previous) => ({ ...previous, settings: result.settings || {} }));
-      setSettingsDraft(settingsFromBackend(result.settings || {}));
-      setSettingsMessage("已保存");
-    } catch (error) {
-      setSettingsMessage((error as Error).message);
-    }
-  }
-
-  async function testNotification() {
-    setSettingsMessage("发送中...");
-    try {
-      const result = await settingsApi.testNotification(settingsPayloadFromDraft(settingsDraft));
-      setSettingsMessage(result.message || "测试通知已发送");
-    } catch (error) {
-      setSettingsMessage((error as Error).message);
-    }
-  }
+  const actions = useRadarActions({
+    radar,
+    loadRadar,
+    notify,
+    setLoadingIds,
+    setSyncingRates,
+    modals,
+  });
 
   function toggleExpandedId(id: number) {
     setExpandedIds((previous) => {
@@ -413,25 +143,6 @@ export function useRadarController() {
       else next.add(id);
       return next;
     });
-  }
-
-  function openCreateChannel() {
-    setFormMessage("");
-    setChannelModal({ mode: "create" });
-  }
-
-  function openEditChannel(channel: AnyRecord) {
-    setFormMessage("");
-    setChannelModal({ mode: "edit", channel });
-  }
-
-  function openMonitorLog(channel: AnyRecord) {
-    setMonitorLogMessage("");
-    setMonitorLog(channel);
-  }
-
-  function updateSettingsDraft(patch: AnyRecord) {
-    setSettingsDraft((current) => ({ ...current, ...patch }));
   }
 
   useEffect(() => {
@@ -445,40 +156,6 @@ export function useRadarController() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    const updatedAt = radar.settings.updated_at || radar.settings.updatedAt;
-    if (updatedAt !== lastSettingsUpdated.current) {
-      lastSettingsUpdated.current = updatedAt;
-      setSettingsDraft(settingsFromBackend(radar.settings));
-    }
-  }, [radar.settings]);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    if (view !== "monitor" || document.hidden) return;
-    if (monitorRefreshInFlight || now < nextMonitorRefreshAt) return;
-    void refreshMonitorFromHeader();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, now, nextMonitorRefreshAt, monitorRefreshInFlight]);
-
-  useEffect(() => {
-    if (view !== "channels" || document.hidden) return;
-    if (channelModal || keyModal || monitorLog) return;
-    if (channelRefreshInFlight || now < nextChannelRefreshAt) return;
-    setChannelRefreshInFlight(true);
-    loadRadar({ quiet: true })
-      .then(() => setNextChannelRefreshAt(Date.now() + CHANNEL_REFRESH_MS))
-      .catch((error) => notify((error as Error).message))
-      .finally(() => setChannelRefreshInFlight(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, now, nextChannelRefreshAt, channelRefreshInFlight, channelModal, keyModal, monitorLog]);
-
-  const monitorRefreshSeconds = Math.max(0, Math.ceil((nextMonitorRefreshAt - now) / 1000));
-
   return {
     radar,
     view,
@@ -491,43 +168,43 @@ export function useRadarController() {
     loadingIds,
     syncingRates,
     toast,
-    channelModal,
-    keyModal,
-    monitorLog,
-    settingsDraft,
-    formMessage,
-    keyMessage,
-    settingsMessage,
-    monitorLogMessage,
-    monitorRefreshInFlight,
-    monitorRefreshSeconds,
+    channelModal: modals.channelModal,
+    keyModal: modals.keyModal,
+    monitorLog: modals.monitorLog,
+    settingsDraft: settingsForm.settingsDraft,
+    formMessage: modals.formMessage,
+    keyMessage: modals.keyMessage,
+    settingsMessage: modals.settingsMessage,
+    monitorLogMessage: modals.monitorLogMessage,
+    monitorRefreshInFlight: autoRefresh.monitorRefreshInFlight,
+    monitorRefreshSeconds: autoRefresh.monitorRefreshSeconds,
     setView,
     setFilter,
     setAlertFilter,
     setLogKind,
-    refreshMonitorFromHeader,
-    probeChannel,
-    syncKeys,
-    toggleMonitor,
-    setDefaultKey,
-    probeModelChannel,
-    ackEvent,
-    ackAllEvents,
-    syncAllRates,
-    openKeyModal,
-    updateKeyDraft,
-    submitKeyForm,
-    submitChannel,
-    deleteChannel,
-    submitSettings,
-    testNotification,
+    refreshMonitorFromHeader: autoRefresh.refreshMonitorFromHeader,
+    probeChannel: actions.probeChannel,
+    syncKeys: actions.syncKeys,
+    toggleMonitor: actions.toggleMonitor,
+    setDefaultKey: actions.setDefaultKey,
+    probeModelChannel: actions.probeModelChannel,
+    ackEvent: actions.ackEvent,
+    ackAllEvents: actions.ackAllEvents,
+    syncAllRates: actions.syncAllRates,
+    openKeyModal: modals.openKeyModal,
+    updateKeyDraft: modals.updateKeyDraft,
+    submitKeyForm: actions.submitKeyForm,
+    submitChannel: actions.submitChannel,
+    deleteChannel: actions.deleteChannel,
+    submitSettings: settingsForm.submitSettings,
+    testNotification: settingsForm.testNotification,
     toggleExpandedId,
-    openCreateChannel,
-    openEditChannel,
-    openMonitorLog,
-    updateSettingsDraft,
-    closeChannelModal: () => setChannelModal(null),
-    closeKeyModal: () => setKeyModal(null),
-    closeMonitorLog: () => setMonitorLog(null),
+    openCreateChannel: modals.openCreateChannel,
+    openEditChannel: modals.openEditChannel,
+    openMonitorLog: modals.openMonitorLog,
+    updateSettingsDraft: settingsForm.updateSettingsDraft,
+    closeChannelModal: modals.closeChannelModal,
+    closeKeyModal: modals.closeKeyModal,
+    closeMonitorLog: modals.closeMonitorLog,
   };
 }
