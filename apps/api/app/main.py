@@ -4,6 +4,7 @@ import argparse
 from http.server import ThreadingHTTPServer
 
 from .api.handler import ApiHandler
+from .core.auth import ADMIN_PASSWORD_PATH, DEFAULT_USERNAME, ensure_admin_credentials
 from .core.config import DB_PATH, DEFAULT_BALANCE_RATE_SCAN_INTERVAL
 from .core.scheduler import start_unified_monitor
 from .domain.store import RadarStore
@@ -30,7 +31,16 @@ def main() -> None:
     parser.add_argument("--no-rate-probe", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--model-monitor-interval", type=int, default=None, help=argparse.SUPPRESS)
     parser.add_argument("--no-model-monitor", action="store_true", help="关闭后台模型监控")
+    parser.add_argument("--no-qqbot-gateway", action="store_true", help="关闭 QQBot Gateway 长连接")
     args = parser.parse_args()
+
+    _, generated_password = ensure_admin_credentials()
+    if generated_password:
+        print(f"Channel Radar admin user: {DEFAULT_USERNAME}", flush=True)
+        print(f"Channel Radar generated password: {generated_password}", flush=True)
+    else:
+        print(f"Channel Radar admin user: {DEFAULT_USERNAME}", flush=True)
+    print(f"Channel Radar password file: {ADMIN_PASSWORD_PATH}", flush=True)
 
     ApiHandler.store = RadarStore(DB_PATH, seed_demo=args.seed_demo)
     legacy_intervals = [value for value in (args.auto_probe_interval, args.rate_probe_interval, args.model_monitor_interval) if value is not None]
@@ -45,7 +55,7 @@ def main() -> None:
         include_rate=include_rate,
         include_model=include_model,
     )
-    stop_qqbot_gateway = start_qqbot_gateway(ApiHandler.store)
+    stop_qqbot_gateway = None if args.no_qqbot_gateway else start_qqbot_gateway(ApiHandler.store)
     server = ThreadingHTTPServer((args.host, args.port), ApiHandler)
     print(f"Channel Radar API running at http://{args.host}:{args.port}/", flush=True)
     try:
@@ -54,7 +64,8 @@ def main() -> None:
         pass
     finally:
         stop_unified_monitor.set()
-        stop_qqbot_gateway.set()
+        if stop_qqbot_gateway is not None:
+            stop_qqbot_gateway.set()
         server.server_close()
 
 

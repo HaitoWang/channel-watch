@@ -13,10 +13,12 @@ import {
   SettingsPanel,
   UsagePanel,
 } from "../features/radar/RadarPanels";
+import ChannelWatchLogo from "../features/codium/CodiumLogo";
+import { type AuthUser } from "../shared/api/auth";
 import { type ViewName, viewMeta } from "./radarModel";
 import { useRadarController } from "./useRadarController";
 
-export function RadarApp() {
+export function RadarApp({ onLogout }: { user: AuthUser; onLogout: () => void }) {
   const {
     radar,
     view,
@@ -75,27 +77,24 @@ export function RadarApp() {
       <SceneOrbit />
       <div className="app-shell">
         <header className="topbar">
-          <a className="brand" href="#" aria-label="渠道雷达首页" onClick={(event) => event.preventDefault()}>
-            <span className="brand-mark">R</span>
+          <a className="brand" href="#" aria-label="Channel Watch 首页" onClick={(event) => event.preventDefault()}>
+            <span className="brand-mark">
+              <ChannelWatchLogo className="brand-logo" />
+            </span>
             <span>
-              <strong>Channel Radar</strong>
+              <strong>Channel Watch</strong>
               <small>AI GATEWAY WATCH</small>
             </span>
           </a>
           <nav className="nav-tabs" aria-label="主导航">
             {(Object.keys(viewMeta) as ViewName[]).map((item) => (
               <button className={item === view ? "nav-tab active" : "nav-tab"} key={item} type="button" data-view={item} onClick={() => setView(item)}>
-                {viewMeta[item].title.replace("渠道雷达", "总览").replace("渠道管理", "渠道").replace("告警中心", "告警").replace("分组倍率", "倍率").replace("消耗分析", "消耗").replace("探测日志", "日志").replace("通知设置", "设置")}
+                {viewMeta[item].title.replace("渠道雷达", "总览").replace("渠道管理", "渠道").replace("告警中心", "告警").replace("分组倍率", "倍率").replace("消耗分析", "消耗").replace("探测日志", "日志").replace("系统设置", "设置")}
               </button>
             ))}
           </nav>
           <div className="top-actions">
-            <button className="pill-button" type="button" aria-label="切换语言">
-              <span className="icon icon-globe" aria-hidden="true"></span>
-              ZH
-            </button>
-            <button className="account-button" type="button">
-              <span className="icon icon-user" aria-hidden="true"></span>
+            <button className="account-button" type="button" onClick={onLogout} title="退出登录">
               退出
             </button>
           </div>
@@ -160,7 +159,7 @@ export function RadarApp() {
         </main>
       </div>
 
-      {channelModal ? <ChannelModal channelModal={channelModal} message={formMessage} onClose={closeChannelModal} onSubmit={submitChannel} /> : null}
+      {channelModal ? <ChannelModal channelModal={channelModal} settings={radar.settings} message={formMessage} onClose={closeChannelModal} onSubmit={submitChannel} /> : null}
       {keyModal ? <KeyModal keyModal={keyModal} message={keyMessage} onClose={closeKeyModal} onDraft={updateKeyDraft} onSubmit={submitKeyForm} /> : null}
       {monitorLog ? <MonitorLogModal channel={monitorLog} message={monitorLogMessage} onClose={closeMonitorLog} /> : null}
       {toast ? <div id="toastMessage" className="toast-message show">{toast}</div> : null}

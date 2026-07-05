@@ -272,8 +272,11 @@ export function useRadarController() {
         key_provider: provider,
         monitor_interval_seconds: channel.monitor_interval_seconds || channel.monitorIntervalSeconds || 60,
         monitor_models: models.join(", ") || providerDefaultModels(provider).join(", "),
+        is_enabled: boolField(channel, "is_enabled", "isEnabled"),
         is_monitoring: boolField(channel, "is_monitoring", "isMonitoring"),
         is_default_key: boolField(channel, "is_default_key", "isDefaultKey"),
+        disable_on_rate_multiplier_change: boolField(channel, "disable_on_rate_multiplier_change", "disableOnRateMultiplierChange"),
+        disable_on_model_sync_failure: boolField(channel, "disable_on_model_sync_failure", "disableOnModelSyncFailure"),
       },
     });
   }
@@ -299,7 +302,10 @@ export function useRadarController() {
       key_provider: provider,
       monitor_models: splitModels(keyModal.draft.monitor_models || providerDefaultModels(provider).join(",")),
       monitor_interval_seconds: Number(keyModal.draft.monitor_interval_seconds || 60),
+      is_enabled: Boolean(keyModal.draft.is_enabled),
       is_monitoring: Boolean(keyModal.draft.is_monitoring),
+      disable_on_rate_multiplier_change: Boolean(keyModal.draft.disable_on_rate_multiplier_change),
+      disable_on_model_sync_failure: Boolean(keyModal.draft.disable_on_model_sync_failure),
     };
     if (!payload.name) {
       setKeyMessage("Key 名称不能为空");
@@ -324,7 +330,11 @@ export function useRadarController() {
     const formData = new FormData(form);
     const payload: AnyRecord = Object.fromEntries(formData.entries());
     payload.threshold = Number(payload.threshold || 10);
+    payload.is_enabled = formData.get("is_enabled") === "on";
     payload.is_demo = formData.get("is_demo") === "on";
+    payload.disable_on_rate_multiplier_change = formData.get("disable_on_rate_multiplier_change") === "on";
+    payload.disable_on_model_sync_failure = formData.get("disable_on_model_sync_failure") === "on";
+    if (!String(payload.source_channel_id || "").trim()) delete payload.source_channel_id;
     if (channelModal?.mode === "edit") {
       ["api_key", "access_token", "refresh_token", "password", "turnstile_token"].forEach((key) => {
         if (!String(payload[key] || "").trim()) delete payload[key];

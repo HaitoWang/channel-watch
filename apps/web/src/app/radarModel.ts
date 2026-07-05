@@ -22,7 +22,7 @@ export const viewMeta: Record<ViewName, { title: string; subtitle: string }> = {
   rates: { title: "分组倍率", subtitle: "分组、模型范围和有效倍率" },
   usage: { title: "消耗分析", subtitle: "余额、消耗和低余额风险" },
   logs: { title: "探测日志", subtitle: "余额、倍率和告警时间线" },
-  settings: { title: "通知设置", subtitle: "pushplus / Server酱 / QQBot 通知" },
+  settings: { title: "系统设置", subtitle: "sub2Api 默认配置 / 通知通道" },
 };
 
 export const MONITOR_REFRESH_MS = 5000;
@@ -74,6 +74,14 @@ export function isDefaultModelList(value: string) {
 
 export function settingsFromBackend(settings: AnyRecord) {
   return {
+    sub2api_enabled: Boolean(settings.sub2api_enabled ?? settings.sub2apiEnabled),
+    sub2api_base_url: settings.sub2api_base_url || settings.sub2apiBaseUrl || "",
+    sub2api_email: settings.sub2api_email || settings.sub2apiEmail || "",
+    sub2api_user_id: settings.sub2api_user_id || settings.sub2apiUserId || "",
+    sub2api_disable_on_rate_multiplier_change:
+      settings.sub2api_disable_on_rate_multiplier_change ?? settings.sub2apiDisableOnRateMultiplierChange ?? false,
+    sub2api_disable_on_model_sync_failure:
+      settings.sub2api_disable_on_model_sync_failure ?? settings.sub2apiDisableOnModelSyncFailure ?? false,
     notification_enabled: Boolean(settings.notification_enabled ?? settings.notificationEnabled),
     notification_channel: settings.notification_channel || settings.notificationChannel || "pushplus",
     pushplus_channel: settings.pushplus_channel || settings.pushplusChannel || "wechat",
@@ -84,9 +92,16 @@ export function settingsFromBackend(settings: AnyRecord) {
     notify_low_balance: settings.notify_low_balance ?? settings.notifyLowBalance ?? true,
     notify_rate_change: settings.notify_rate_change ?? settings.notifyRateChange ?? true,
     notify_model_failure: settings.notify_model_failure ?? settings.notifyModelFailure ?? true,
+    sub2api_password: "",
+    sub2api_access_token: "",
+    sub2api_refresh_token: "",
+    sub2api_turnstile_token: "",
     pushplus_token: "",
     serverchan_send_key: "",
     qqbot_secret: "",
+    clear_sub2api_password: false,
+    clear_sub2api_tokens: false,
+    clear_sub2api_turnstile_token: false,
     clear_pushplus_token: false,
     clear_serverchan_send_key: false,
     clear_qqbot_secret: false,
@@ -95,9 +110,24 @@ export function settingsFromBackend(settings: AnyRecord) {
 
 export function settingsPayloadFromDraft(draft: AnyRecord) {
   const payload = { ...draft };
+  const sub2apiPassword = String(payload.sub2api_password || "").trim();
+  const sub2apiAccessToken = String(payload.sub2api_access_token || "").trim();
+  const sub2apiRefreshToken = String(payload.sub2api_refresh_token || "").trim();
+  const sub2apiTurnstileToken = String(payload.sub2api_turnstile_token || "").trim();
   const pushplusToken = String(payload.pushplus_token || "").trim();
   const serverchanSendKey = String(payload.serverchan_send_key || "").trim();
   const qqbotSecret = String(payload.qqbot_secret || "").trim();
+  payload.sub2api_base_url = String(payload.sub2api_base_url || "").trim();
+  payload.sub2api_email = String(payload.sub2api_email || "").trim();
+  payload.sub2api_user_id = String(payload.sub2api_user_id || "").trim();
+  if (sub2apiPassword) payload.sub2api_password = sub2apiPassword;
+  else delete payload.sub2api_password;
+  if (sub2apiAccessToken) payload.sub2api_access_token = sub2apiAccessToken;
+  else delete payload.sub2api_access_token;
+  if (sub2apiRefreshToken) payload.sub2api_refresh_token = sub2apiRefreshToken;
+  else delete payload.sub2api_refresh_token;
+  if (sub2apiTurnstileToken) payload.sub2api_turnstile_token = sub2apiTurnstileToken;
+  else delete payload.sub2api_turnstile_token;
   if (pushplusToken) payload.pushplus_token = pushplusToken;
   else delete payload.pushplus_token;
   if (serverchanSendKey) payload.serverchan_send_key = serverchanSendKey;

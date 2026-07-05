@@ -7,9 +7,9 @@ from apps.api.app.api.request import ApiRequest, RouteResult, ok
 
 def handle(request: ApiRequest) -> Optional[RouteResult]:
     if request.method == "GET" and request.path == "/api/settings":
-        return ok({"settings": request.store.notification_settings()})
+        return ok({"settings": request.store.app_settings()})
     if request.method == "PATCH" and request.path == "/api/settings":
-        return ok(request.store.update_notification_settings(request.json()))
+        return ok(request.store.update_app_settings(request.json()))
     if request.method == "POST" and request.path == "/api/settings/test-pushplus":
         return ok(request.store.send_test_notification())
     if request.method == "POST" and request.path == "/api/settings/test-serverchan":

@@ -211,6 +211,7 @@ button:disabled {
   width: 46px;
   height: 46px;
   place-items: center;
+  overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 11px;
   background:
@@ -221,6 +222,12 @@ button:disabled {
   font-size: 25px;
   font-weight: 900;
   line-height: 1;
+}
+
+.brand-logo {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .brand strong {
@@ -311,7 +318,8 @@ button:disabled {
 }
 
 .account-button {
-  min-width: 96px;
+  min-width: 64px;
+  padding: 0 18px;
   border-color: transparent;
   background: linear-gradient(135deg, var(--hot), #ff397d);
   box-shadow: 0 18px 42px rgba(255, 46, 115, 0.32);
@@ -358,6 +366,640 @@ button:disabled {
 
 .primary-button.is-refresh {
   min-width: 132px;
+}
+
+.auth-shell {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+}
+
+.login-panel {
+  position: relative;
+  width: min(100%, 430px);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  padding: 28px;
+  background:
+    linear-gradient(180deg, rgba(20, 23, 28, 0.95), rgba(10, 12, 15, 0.94)),
+    rgba(13, 16, 20, 0.96);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.58);
+  backdrop-filter: blur(18px);
+}
+
+.auth-status-panel {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  color: var(--soft);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.auth-status-panel p {
+  margin: 0;
+}
+
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.login-brand-mark {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.1), transparent),
+    #030405;
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.44);
+  color: #fff;
+  font-size: 23px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.login-brand strong {
+  display: block;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.login-brand small {
+  display: block;
+  margin-top: 5px;
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  color: var(--hot-2);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.login-panel h1 {
+  margin: 0;
+  color: var(--text);
+  font-size: 25px;
+  line-height: 1.15;
+}
+
+.login-copy {
+  margin: 10px 0 22px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.55;
+}
+
+.login-form {
+  display: grid;
+  gap: 14px;
+}
+
+.login-form label {
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.login-form input {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  padding: 0 12px;
+  outline: none;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.login-form input:focus {
+  border-color: rgba(255, 46, 115, 0.55);
+  box-shadow: 0 0 0 3px rgba(255, 46, 115, 0.12);
+}
+
+.login-form .primary-button {
+  width: 100%;
+  margin-top: 4px;
+}
+
+.login-note {
+  margin: 16px 0 0;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 760;
+  line-height: 1.5;
+}
+
+.login-error,
+.login-success {
+  margin: 0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.login-error {
+  border: 1px solid rgba(255, 100, 124, 0.25);
+  background: rgba(255, 100, 124, 0.1);
+  color: #ffd6df;
+}
+
+.login-success {
+  border: 1px solid rgba(113, 228, 163, 0.25);
+  background: rgba(113, 228, 163, 0.1);
+  color: var(--good);
+}
+
+.codium-shell {
+  --codium-panel: rgba(13, 16, 20, 0.72);
+  --codium-line: rgba(255, 255, 255, 0.12);
+  --codium-muted: rgba(246, 247, 248, 0.66);
+  --codium-faint: rgba(246, 247, 248, 0.42);
+  --codium-hot: #ff2f68;
+  --codium-hot-strong: #ff1f5f;
+  position: relative;
+  min-height: 100vh;
+  overflow: hidden;
+  background: #101113;
+  color: #f6f7f8;
+}
+
+.codium-shell::before {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  content: "";
+  background:
+    linear-gradient(90deg, rgba(16, 17, 19, 0.98) 0%, rgba(16, 17, 19, 0.6) 31%, rgba(16, 17, 19, 0) 56%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.015), transparent 28%);
+}
+
+.codium-robot-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  transition:
+    opacity 0.45s ease,
+    transform 0.55s ease;
+}
+
+.codium-robot-stage canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.codium-robot-stage-auth {
+  opacity: 0.78;
+  transform: translateX(7vw) scale(1.03);
+}
+
+.codium-topbar,
+.codium-hero-grid,
+.codium-footer-bar {
+  position: relative;
+  z-index: 2;
+}
+
+.codium-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  width: 100%;
+  margin: 0;
+  padding: 2.15rem clamp(1rem, 3vw, 3rem);
+}
+
+.codium-brand-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.85rem;
+  color: inherit;
+  text-decoration: none;
+}
+
+.codium-logo-core {
+  display: grid;
+  width: 3.35rem;
+  height: 3.35rem;
+  place-items: center;
+  border-radius: 1rem;
+  overflow: hidden;
+  box-shadow: 0 1rem 2.6rem rgba(0, 0, 0, 0.28);
+}
+
+.codium-logo {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.codium-brand-mark strong,
+.codium-brand-mark small {
+  display: block;
+}
+
+.codium-brand-mark strong {
+  font-size: 1rem;
+  letter-spacing: 0.02em;
+}
+
+.codium-brand-mark small {
+  margin-top: 0.12rem;
+  color: var(--codium-faint);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+}
+
+.codium-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.codium-mascot-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.18rem;
+  padding: 0.22rem;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 0.85rem;
+  backdrop-filter: blur(20px);
+}
+
+.codium-mascot-switch button {
+  display: inline-flex;
+  width: 2.18rem;
+  height: 2.18rem;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: rgba(255, 255, 255, 0.68);
+  background: transparent;
+  border: 0;
+  border-radius: 0.62rem;
+}
+
+.codium-mascot-switch button span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.codium-mascot-switch button.is-active {
+  color: #061014;
+  background: rgba(246, 247, 248, 0.96);
+}
+
+.codium-icon-pill {
+  display: inline-flex;
+  min-height: 2.6rem;
+  min-width: 4.4rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 0 1rem;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  backdrop-filter: blur(20px);
+}
+
+.codium-hero-grid {
+  display: grid;
+  grid-template-columns: minmax(22rem, 34.5rem) minmax(34rem, 1fr);
+  gap: clamp(3rem, 7vw, 8rem);
+  width: min(100% - clamp(5.5rem, 14vw, 14rem), 86rem);
+  min-height: calc(100vh - 9rem);
+  margin: 0 auto;
+  align-items: center;
+  padding: 0 0 5rem;
+}
+
+.codium-hero-grid.is-auth {
+  grid-template-columns: minmax(22rem, 31.5rem) minmax(34rem, 1fr);
+}
+
+.codium-hero-copy {
+  max-width: 34.5rem;
+}
+
+.codium-hero-copy h1 {
+  margin: 1.55rem 0 0;
+  color: #f6f7f8;
+  font-size: clamp(4.8rem, 7.6vw, 7rem);
+  line-height: 0.88;
+  letter-spacing: 0;
+  text-shadow: 0 1.5rem 5rem rgba(0, 0, 0, 0.34);
+}
+
+.codium-tagline {
+  margin-top: 1.9rem;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: clamp(1.04rem, 1.5vw, 1.28rem);
+  font-weight: 650;
+}
+
+.codium-hero-description,
+.codium-hero-emphasis {
+  max-width: 34rem;
+  font-size: clamp(0.98rem, 1.18vw, 1.08rem);
+  line-height: 1.78;
+}
+
+.codium-hero-description {
+  margin-top: 1rem;
+  color: var(--codium-muted);
+}
+
+.codium-hero-emphasis {
+  margin-top: 0.85rem;
+  color: rgba(246, 247, 248, 0.78);
+}
+
+.codium-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-top: 2.25rem;
+}
+
+.codium-primary-button,
+.codium-submit-button,
+.codium-close-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  border: 0;
+  border-radius: 999px;
+  transition:
+    transform 0.2s ease,
+    background 0.2s ease,
+    color 0.2s ease;
+}
+
+.codium-primary-button {
+  min-height: 3.05rem;
+  min-width: 8.8rem;
+  padding: 0 1.55rem;
+  color: #fff;
+  background: linear-gradient(135deg, var(--codium-hot), var(--codium-hot-strong));
+  box-shadow: 0 1.2rem 3rem rgba(255, 47, 104, 0.22);
+  font-weight: 750;
+}
+
+.codium-primary-button:hover,
+.codium-submit-button:hover {
+  transform: translateY(-2px);
+}
+
+.codium-auth-panel {
+  position: relative;
+  width: min(100%, 32rem);
+  justify-self: start;
+  padding: clamp(0.5rem, 1.6vw, 1rem) 0 0;
+}
+
+.codium-close-button {
+  position: absolute;
+  top: 0.15rem;
+  right: 0;
+  width: 2rem;
+  height: 2rem;
+  color: rgba(255, 255, 255, 0.42);
+  background: transparent;
+}
+
+.codium-auth-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: #f6f7f8;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.codium-auth-panel h2 {
+  margin: 0.7rem 0 0;
+  color: #f6f7f8;
+  font-size: clamp(1.9rem, 2.7vw, 2.65rem);
+  line-height: 1.08;
+  letter-spacing: 0;
+}
+
+.codium-auth-panel p {
+  margin: 0.55rem 0 0;
+  color: rgba(246, 247, 248, 0.58);
+  font-size: clamp(0.94rem, 1vw, 1rem);
+}
+
+.codium-auth-form {
+  display: grid;
+  gap: 1rem;
+  margin-top: clamp(1.45rem, 3vh, 2rem);
+}
+
+.codium-field {
+  display: grid;
+  gap: 0.55rem;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
+.codium-input-shell {
+  display: flex;
+  min-height: 3.35rem;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0 0.95rem;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 0.55rem;
+}
+
+.codium-input-shell svg {
+  color: rgba(255, 255, 255, 0.54);
+}
+
+.codium-input-shell input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  appearance: none;
+  background: transparent !important;
+  color: #fff;
+  caret-color: #fff;
+}
+
+.codium-input-shell:focus-within {
+  border-color: rgba(255, 255, 255, 0.42);
+}
+
+.codium-input-shell input::placeholder {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.codium-submit-button {
+  min-height: 3.3rem;
+  color: #fff;
+  background: linear-gradient(135deg, var(--codium-hot), var(--codium-hot-strong));
+  box-shadow: 0 1rem 2.4rem rgba(255, 47, 104, 0.22);
+  font-weight: 800;
+}
+
+.codium-submit-button:disabled {
+  cursor: not-allowed;
+  color: rgba(255, 255, 255, 0.32);
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: none;
+}
+
+.codium-auth-error,
+.codium-auth-success {
+  margin: 0;
+  border-radius: 0.55rem;
+  padding: 0.75rem 0.85rem;
+  font-size: 0.82rem;
+  font-weight: 750;
+  line-height: 1.45;
+}
+
+.codium-auth-error {
+  border: 1px solid rgba(255, 47, 104, 0.34);
+  background: rgba(255, 47, 104, 0.12);
+  color: #ffd8e2;
+}
+
+.codium-auth-success {
+  border: 1px solid rgba(117, 216, 157, 0.3);
+  background: rgba(117, 216, 157, 0.1);
+  color: #a7f3c4;
+}
+
+.codium-login-note {
+  margin-top: 1rem !important;
+  overflow-wrap: anywhere;
+  color: rgba(246, 247, 248, 0.44) !important;
+  font-size: 0.76rem !important;
+  line-height: 1.55;
+}
+
+.codium-footer-bar {
+  position: absolute;
+  left: 50%;
+  top: calc(100vh - 4.35rem);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 0.78rem;
+  transform: translateX(-50%);
+}
+
+@media (max-width: 1180px) {
+  .codium-hero-grid,
+  .codium-hero-grid.is-auth {
+    grid-template-columns: minmax(0, 1fr);
+    width: min(100% - 2rem, 46rem);
+    align-items: end;
+    padding-top: 7vh;
+  }
+
+  .codium-shell::before {
+    background:
+      linear-gradient(180deg, rgba(16, 17, 19, 0.74) 0%, rgba(16, 17, 19, 0.94) 54%, rgba(16, 17, 19, 1) 100%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.015), transparent 28%);
+  }
+
+  .codium-robot-stage {
+    transform: translateX(16vw) translateY(-6vh) scale(0.86);
+  }
+
+  .codium-robot-stage-auth {
+    opacity: 0.42;
+  }
+}
+
+@media (max-width: 720px) {
+  .codium-topbar {
+    align-items: flex-start;
+    padding: 1rem;
+  }
+
+  .codium-logo-core {
+    width: 2.85rem;
+    height: 2.85rem;
+  }
+
+  .codium-brand-mark strong {
+    font-size: 0.95rem;
+  }
+
+  .codium-mascot-switch {
+    display: none;
+  }
+
+  .codium-hero-grid {
+    min-height: calc(100vh - 6rem);
+    padding-bottom: 6rem;
+  }
+
+  .codium-hero-copy h1 {
+    font-size: clamp(4.1rem, 20vw, 5.6rem);
+  }
+
+  .codium-robot-stage {
+    opacity: 0.86;
+    transform: translateY(-6vh);
+  }
+
+  .codium-shell::before {
+    background:
+      linear-gradient(180deg, rgba(16, 17, 19, 0.46) 0%, rgba(16, 17, 19, 0.74) 38%, rgba(16, 17, 19, 0.98) 78%),
+      linear-gradient(90deg, rgba(16, 17, 19, 0.82) 0%, rgba(16, 17, 19, 0.54) 52%, rgba(16, 17, 19, 0.16) 100%);
+  }
+
+  .codium-primary-button,
+  .codium-submit-button {
+    width: 100%;
+  }
 }
 
 .metrics-grid {
@@ -663,35 +1305,10 @@ button:disabled {
 }
 
 .settings-panel {
-  max-width: 760px;
+  max-width: 900px;
   margin-top: 18px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background:
-    linear-gradient(180deg, rgba(20, 23, 28, 0.84), rgba(10, 12, 15, 0.82)),
-    rgba(9, 11, 14, 0.78);
-  box-shadow: var(--shadow);
-  backdrop-filter: blur(18px);
-}
-
-.settings-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 18px 18px 0;
-}
-
-.settings-head h2 {
-  margin: 0;
-  font-size: 18px;
-}
-
-.settings-head p {
-  margin: 6px 0 0;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 800;
+  border: 0;
+  background: transparent;
 }
 
 .settings-status {
@@ -702,13 +1319,129 @@ button:disabled {
 }
 
 .settings-form {
-  padding-top: 18px;
+  gap: 14px;
+  padding: 0;
+}
+
+.settings-tabs {
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(150px, 1fr));
+  width: min(100%, 430px);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.settings-tabs button {
+  min-height: 38px;
+  border: 0;
+  border-radius: 6px;
+  padding: 0 14px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.settings-tabs button.active {
+  background: rgba(255, 46, 115, 0.18);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px rgba(255, 46, 115, 0.24);
+}
+
+.settings-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  background:
+    linear-gradient(180deg, rgba(20, 23, 28, 0.82), rgba(10, 12, 15, 0.78)),
+    rgba(9, 11, 14, 0.72);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(18px);
+}
+
+.settings-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.settings-card-head h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 17px;
+}
+
+.settings-card-head p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.settings-event-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.settings-toggle-row {
+  display: flex !important;
+  align-items: center;
+  gap: 9px;
+  min-height: 38px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.settings-toggle-row input {
+  width: 16px !important;
+  min-height: 16px !important;
+  accent-color: var(--hot);
+}
+
+.settings-toggle-row span {
+  color: var(--text) !important;
+  font-size: 13px !important;
+}
+
+.settings-toggle-row.danger {
+  border-color: rgba(255, 100, 124, 0.18);
+  background: rgba(255, 100, 124, 0.055);
+}
+
+.settings-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 4px;
+}
+
+.settings-actions span {
+  margin-right: auto;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .settings-channel {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+  margin-top: 14px;
 }
 
 .settings-channel[hidden] {
@@ -735,6 +1468,8 @@ button:disabled {
 .settings-subhead {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
   min-height: 26px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   padding-top: 12px;
@@ -2129,13 +2864,26 @@ button:disabled {
     padding: 14px;
   }
 
-  .settings-head {
-    display: grid;
-    gap: 10px;
-  }
-
   .settings-status {
     justify-content: flex-start;
+  }
+
+  .settings-tabs,
+  .settings-grid,
+  .settings-event-grid,
+  .settings-channel {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-card-head,
+  .settings-actions {
+    display: grid;
+    justify-content: stretch;
+  }
+
+  .settings-actions .primary-button,
+  .settings-actions .ghost-button {
+    width: 100%;
   }
 
   .monitor-card {

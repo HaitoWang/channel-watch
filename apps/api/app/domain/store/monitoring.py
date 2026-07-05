@@ -180,6 +180,14 @@ class MonitoringMixin:
                 f"{row['name']} 模型监控失败",
                 "；".join(failures),
             )
+            if self.channel_policy_enabled(row, "disable_on_model_sync_failure"):
+                self.disable_channel_scheduling(
+                    channel_id,
+                    row,
+                    reason="model_sync_failure",
+                    message=f"模型监控失败，已按渠道策略停止调度：{'；'.join(failures)}",
+                    severity="critical",
+                )
             if notify and event_state:
                 self.notify_event(event_state["event"])
         return {

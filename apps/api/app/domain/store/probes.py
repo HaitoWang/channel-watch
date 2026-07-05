@@ -214,6 +214,14 @@ class ProbeServiceMixin:
                 f"{row['name']} 分组倍率变化",
                 f"倍率从 {previous_rate:g} 变为 {current_rate:g}。",
             )
+            if self.channel_policy_enabled(row, "disable_on_rate_multiplier_change"):
+                self.disable_channel_scheduling(
+                    channel_id,
+                    row,
+                    reason="rate_multiplier_change",
+                    message=f"检测到倍率从 {previous_rate:g} 变为 {current_rate:g}，已按渠道策略停止调度。",
+                    severity="warning",
+                )
             if notify:
                 self.notify_event(event_state["event"] if event_state else None, send_updates=True)
         return {

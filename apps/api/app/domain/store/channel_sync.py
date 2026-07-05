@@ -156,9 +156,10 @@ class ChannelSyncMixin:
                             name, platform, base_url, model_scope, group_id, group_name, rate_multiplier,
                             threshold, api_key, api_key_masked, access_token, refresh_token, user_id, email,
                             password, external_key_id, key_name, key_provider, source_channel_id, is_enabled, is_demo,
-                            is_account_parent, is_default_key, monitor_models, status, created_at, updated_at
+                            is_account_parent, is_default_key, monitor_models, disable_on_rate_multiplier_change,
+                            disable_on_model_sync_failure, status, created_at, updated_at
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?, 'never', ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?, ?, ?, 'never', ?, ?)
                         """,
                         (
                             channel_name,
@@ -182,6 +183,8 @@ class ChannelSyncMixin:
                             parent_id,
                             is_enabled,
                             monitor_models_json,
+                            1 if parent_row["disable_on_rate_multiplier_change"] else 0,
+                            1 if parent_row["disable_on_model_sync_failure"] else 0,
                             now,
                             now,
                         ),

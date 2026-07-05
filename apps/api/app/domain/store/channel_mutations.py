@@ -19,9 +19,30 @@ class ChannelMutationMixin:
         user_id = str(payload.get("user_id") or payload.get("userId") or "").strip() or None
         email = str(payload.get("email") or "").strip() or None
         password = str(payload.get("password") or "").strip() or None
+        turnstile_token = str(payload.get("turnstile_token") or payload.get("turnstileToken") or "").strip() or None
         key_provider = normalize_key_provider(payload.get("key_provider") or payload.get("keyProvider") or payload.get("provider") or payload.get("type"))
+        source_channel_id = (
+            int(payload.get("source_channel_id") or payload.get("sourceChannelId"))
+            if (payload.get("source_channel_id") or payload.get("sourceChannelId"))
+            else None
+        )
+        parent_row = self.get_channel_row(source_channel_id) if source_channel_id else None
+        sub2api_defaults = self.sub2api_settings(include_secret=True)
         if not name:
             raise ApiError(400, "渠道名称不能为空")
+        if source_channel_id and not parent_row:
+            raise ApiError(404, "关联账号不存在")
+        if parent_row:
+            platform = platform or parent_row["platform"]
+            base_url = base_url or parent_row["base_url"]
+        if platform == "sub2Api" and bool_value(sub2api_defaults.get("sub2api_enabled")):
+            base_url = base_url or sub2api_defaults.get("sub2api_base_url")
+            access_token = access_token or sub2api_defaults.get("sub2api_access_token")
+            refresh_token = refresh_token or sub2api_defaults.get("sub2api_refresh_token")
+            user_id = user_id or sub2api_defaults.get("sub2api_user_id")
+            email = email or sub2api_defaults.get("sub2api_email")
+            password = password or sub2api_defaults.get("sub2api_password")
+            turnstile_token = turnstile_token or sub2api_defaults.get("sub2api_turnstile_token")
         if platform not in {"newApi", "sub2Api"}:
             raise ApiError(400, "platform 必须是 newApi 或 sub2Api")
         if not base_url:
@@ -31,17 +52,58 @@ class ChannelMutationMixin:
                 base_url,
                 email,
                 password,
-                str(payload.get("turnstile_token") or payload.get("turnstileToken") or "").strip() or None,
+                turnstile_token,
             )
             access_token = auth.get("access_token") or access_token
             refresh_token = auth.get("refresh_token") or refresh_token
             user_id = auth.get("user_id") or user_id
-        is_account_parent = platform == "sub2Api" and bool(email or password or access_token or refresh_token)
+        is_account_parent = not source_channel_id and platform == "sub2Api" and bool(email or password or access_token or refresh_token)
         parent_api_key = None if is_account_parent else api_key
         parent_key_masked = None if is_account_parent else str(payload.get("api_key_masked") or payload.get("apiKeyMasked") or "").strip() or None
         parent_external_key_id = None if is_account_parent else str(payload.get("external_key_id") or payload.get("externalKeyId") or "").strip() or None
         parent_key_name = None if is_account_parent else str(payload.get("key_name") or payload.get("keyName") or "").strip() or None
         parent_key_provider = None if is_account_parent else key_provider
+        default_disable_on_rate_multiplier_change = (
+            parent_row["disable_on_rate_multiplier_change"]
+            if parent_row
+            else sub2api_defaults.get("sub2api_disable_on_rate_multiplier_change", False)
+        )
+        default_disable_on_model_sync_failure = (
+            parent_row["disable_on_model_sync_failure"]
+            if parent_row
+            else sub2api_defaults.get("sub2api_disable_on_model_sync_failure", False)
+        )
+        disable_on_rate_multiplier_change = 1 if bool_value(
+            payload.get(
+                "disable_on_rate_multiplier_change",
+                payload.get(
+                    "disableOnRateMultiplierChange",
+                    default_disable_on_rate_multiplier_change,
+                ),
+            )
+        ) else 0
+        disable_on_model_sync_failure = 1 if bool_value(
+            payload.get(
+                "disable_on_model_sync_failure",
+                payload.get(
+                    "disableOnModelSyncFailure",
+                    default_disable_on_model_sync_failure,
+                ),
+            )
+        ) else 0
+        if source_channel_id and parent_row:
+            platform = parent_row["platform"]
+            base_url = parent_row["base_url"]
+            access_token = access_token or parent_row["access_token"]
+            refresh_token = refresh_token or parent_row["refresh_token"]
+            user_id = user_id or parent_row["user_id"]
+            email = email or parent_row["email"]
+            password = password or parent_row["password"]
+            parent_api_key = api_key
+            parent_key_masked = str(payload.get("api_key_masked") or payload.get("apiKeyMasked") or "").strip() or (mask_secret(api_key) if api_key else None)
+            parent_external_key_id = str(payload.get("external_key_id") or payload.get("externalKeyId") or "").strip() or None
+            parent_key_name = str(payload.get("key_name") or payload.get("keyName") or name).strip() or name
+            parent_key_provider = key_provider
         now = utc_now()
         with self.connect() as conn:
             cursor = conn.execute(
@@ -50,9 +112,10 @@ class ChannelMutationMixin:
                     name, platform, base_url, model_scope, group_id, group_name, rate_multiplier,
                     threshold, api_key, api_key_masked, access_token, refresh_token, user_id, email, password,
                     external_key_id, key_name, key_provider, source_channel_id, is_enabled, is_demo, is_account_parent,
-                    is_default_key, monitor_models, created_at, updated_at
+                    is_default_key, monitor_models, disable_on_rate_multiplier_change, disable_on_model_sync_failure,
+                    created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     name,
@@ -73,9 +136,7 @@ class ChannelMutationMixin:
                     parent_external_key_id,
                     parent_key_name,
                     parent_key_provider,
-                    int(payload.get("source_channel_id") or payload.get("sourceChannelId"))
-                    if (payload.get("source_channel_id") or payload.get("sourceChannelId"))
-                    else None,
+                    source_channel_id,
                     1 if bool_value(payload.get("is_enabled", payload.get("isEnabled", True))) else 0,
                     1 if bool_value(payload.get("is_demo", payload.get("isDemo", False))) else 0,
                     1 if is_account_parent else 0,
@@ -87,6 +148,8 @@ class ChannelMutationMixin:
                         ),
                         ensure_ascii=False,
                     ),
+                    disable_on_rate_multiplier_change,
+                    disable_on_model_sync_failure,
                     now,
                     now,
                 ),
@@ -99,9 +162,10 @@ class ChannelMutationMixin:
                         name, platform, base_url, model_scope, group_id, group_name, rate_multiplier,
                         threshold, api_key, api_key_masked, access_token, refresh_token, user_id, email, password,
                         external_key_id, key_name, key_provider, source_channel_id, is_enabled, is_demo, is_account_parent,
-                        is_default_key, monitor_models, status, created_at, updated_at
+                        is_default_key, monitor_models, disable_on_rate_multiplier_change, disable_on_model_sync_failure,
+                        status, created_at, updated_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 1, ?, 'never', ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 1, ?, ?, ?, 'never', ?, ?)
                     """,
                     (
                         str(payload.get("key_name") or payload.get("keyName") or name).strip() or name,
@@ -132,6 +196,8 @@ class ChannelMutationMixin:
                             ),
                             ensure_ascii=False,
                         ),
+                        disable_on_rate_multiplier_change,
+                        disable_on_model_sync_failure,
                         now,
                         now,
                     ),
@@ -186,6 +252,12 @@ class ChannelMutationMixin:
             "isDefaultKey": "is_default_key",
             "is_monitoring": "is_monitoring",
             "isMonitoring": "is_monitoring",
+            "disable_on_rate_multiplier_change": "disable_on_rate_multiplier_change",
+            "disableOnRateMultiplierChange": "disable_on_rate_multiplier_change",
+            "disable_on_model_sync_failure": "disable_on_model_sync_failure",
+            "disableOnModelSyncFailure": "disable_on_model_sync_failure",
+            "scheduling_disabled_reason": "scheduling_disabled_reason",
+            "schedulingDisabledReason": "scheduling_disabled_reason",
             "monitor_models": "monitor_models",
             "monitorModels": "monitor_models",
             "monitor_interval_seconds": "monitor_interval_seconds",
@@ -205,8 +277,11 @@ class ChannelMutationMixin:
                 value = optional_float(value)
             elif column == "source_channel_id":
                 value = int(value) if value not in {None, ""} else None
-            elif column in {"is_enabled", "is_account_parent", "is_monitoring"}:
+            elif column in {"is_enabled", "is_account_parent", "is_monitoring", "disable_on_rate_multiplier_change", "disable_on_model_sync_failure"}:
                 value = 1 if bool_value(value) else 0
+                if column == "is_enabled" and value:
+                    assignments.append("scheduling_disabled_reason = ?")
+                    params.append(None)
             elif column == "is_default_key":
                 should_set_default = bool_value(value)
                 value = 1 if should_set_default else 0
@@ -238,6 +313,41 @@ class ChannelMutationMixin:
         if should_set_default:
             self.set_default_key(channel_id)
         return self.public_channel(self.get_channel_row(channel_id))
+
+    def channel_policy_enabled(self, row: Any, column: str) -> bool:
+        if not row:
+            return False
+        if bool(row[column]):
+            return True
+        parent_id = row["source_channel_id"]
+        if not parent_id:
+            return False
+        parent = self.get_channel_row(int(parent_id))
+        return bool(parent and parent[column])
+
+    def disable_channel_scheduling(self, channel_id: int, row: Any, *, reason: str, message: str, severity: str = "warning") -> None:
+        if not row or not bool(row["is_enabled"]):
+            return
+        now = utc_now()
+        with self.connect() as conn:
+            conn.execute(
+                """
+                UPDATE channels
+                SET is_enabled = 0,
+                    is_monitoring = 0,
+                    scheduling_disabled_reason = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (reason, now, channel_id),
+            )
+        self.ensure_event(
+            channel_id,
+            "scheduling_disabled",
+            severity,
+            f"{row['name']} 已停止调度",
+            message,
+        )
 
     def set_default_key(self, channel_id: int) -> None:
         row = self.get_channel_row(channel_id)

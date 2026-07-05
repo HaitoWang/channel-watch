@@ -121,6 +121,7 @@ function AccountRow({
   const children = account.children || [];
   const defaultChildId = account.default_child_id ?? account.defaultChildId;
   const monitoringCount = account.monitoring_count ?? account.monitoringCount ?? 0;
+  const enabled = boolField(account, "is_enabled", "isEnabled");
   const percent = clampPercent(account.remaining_percent ?? account.remainingPercent ?? 0);
   const progressClass = account.status === "warning" ? "warning" : account.status === "offline" ? "danger" : "";
   return (
@@ -128,7 +129,9 @@ function AccountRow({
       <div className="channel-identity">
         <span className={`status-dot ${statusDotClass(account.status)}`}></span>
         <div>
-          <h3>{account.name}</h3>
+          <h3>
+            {account.name} {!enabled ? <span className="badge bad">已停调</span> : null}
+          </h3>
           <code>{maskBaseUrl(account.base_url || account.baseUrl)}</code>
         </div>
       </div>
@@ -210,9 +213,11 @@ function KeyRow({
   const provider = monitorProvider(channel.key_provider || channel.keyProvider || models[0], channel.platform);
   const monitoring = boolField(channel, "is_monitoring", "isMonitoring");
   const isDefault = boolField(channel, "is_default_key", "isDefaultKey");
+  const enabled = boolField(channel, "is_enabled", "isEnabled");
   const monitorChecked = channel.monitor_last_checked_at || channel.monitorLastCheckedAt;
   const monitorError = channel.monitor_last_error || channel.monitorLastError;
-  const lastLine = monitorError ? `监控错误: ${monitorError}` : monitorChecked ? `模型探测: ${formatTime(monitorChecked)}` : "尚未模型探测";
+  const disabledReason = channel.scheduling_disabled_reason || channel.schedulingDisabledReason;
+  const lastLine = !enabled && disabledReason ? `停调原因: ${disabledReason}` : monitorError ? `监控错误: ${monitorError}` : monitorChecked ? `模型探测: ${formatTime(monitorChecked)}` : "尚未模型探测";
   return (
     <div className="key-row" data-id={id}>
       <div className="channel-identity">
@@ -220,6 +225,7 @@ function KeyRow({
         <div>
           <h3>
             {channel.name} {isDefault ? <span className="badge good">默认</span> : null}
+            {!enabled ? <span className="badge bad">已停调</span> : null}
           </h3>
           <code>{channel.key_masked || channel.keyMasked || "未配置密钥"}</code>
         </div>

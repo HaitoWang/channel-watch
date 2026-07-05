@@ -5,19 +5,40 @@ import { monitorDisplayName } from './utils';
 
 export function ChannelModal({
   channelModal,
+  settings,
   message,
   onClose,
   onSubmit,
 }: {
   channelModal: { mode: "create" } | { mode: "edit"; channel: AnyRecord };
+  settings: AnyRecord;
   message: string;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   const channel = channelModal.mode === "edit" ? channelModal.channel : {};
   const isEdit = channelModal.mode === "edit";
+  const sub2apiBaseUrl = settings.sub2api_base_url || settings.sub2apiBaseUrl || "";
+  const sub2apiEmail = settings.sub2api_email || settings.sub2apiEmail || "";
+  const sub2apiUserId = settings.sub2api_user_id || settings.sub2apiUserId || "";
+  const sub2apiPasswordMasked = settings.sub2api_password_masked || settings.sub2apiPasswordMasked;
+  const sub2apiAccessTokenMasked = settings.sub2api_access_token_masked || settings.sub2apiAccessTokenMasked;
+  const sub2apiRefreshTokenMasked = settings.sub2api_refresh_token_masked || settings.sub2apiRefreshTokenMasked;
+  const defaultRateStop = Boolean(settings.sub2api_disable_on_rate_multiplier_change ?? settings.sub2apiDisableOnRateMultiplierChange);
+  const defaultModelStop = Boolean(settings.sub2api_disable_on_model_sync_failure ?? settings.sub2apiDisableOnModelSyncFailure);
   const apiKeyMasked = channel.api_key_masked || channel.apiKeyMasked || channel.key_masked || channel.keyMasked;
-  const accessTokenHint = channel.has_access_token || channel.hasAccessToken ? "已配置，留空则不修改" : "账号同步/余额查询使用";
+  const accessTokenHint =
+    channel.has_access_token || channel.hasAccessToken
+      ? "已配置，留空则不修改"
+      : !isEdit && sub2apiAccessTokenMasked
+        ? `设置已配置: ${sub2apiAccessTokenMasked}`
+        : "账号同步/余额查询使用";
+  const refreshTokenHint = isEdit
+    ? "留空则不修改"
+    : sub2apiRefreshTokenMasked
+      ? `设置已配置: ${sub2apiRefreshTokenMasked}`
+      : "sub2Api 自动刷新登录";
+  const passwordHint = isEdit ? "留空则不修改" : sub2apiPasswordMasked ? `设置已配置: ${sub2apiPasswordMasked}` : "sub2Api 登录密码";
   return (
     <div className="modal-backdrop" id="channelModal" onMouseDown={(event) => event.currentTarget === event.target && onClose()}>
       <section className="modal-panel" role="dialog" aria-modal="true" aria-labelledby="channelModalTitle">
@@ -41,7 +62,12 @@ export function ChannelModal({
           </label>
           <label className="span-2">
             <span>Base URL</span>
-            <input name="base_url" required placeholder="https://api.example.com" autoComplete="off" defaultValue={channel.base_url || channel.baseUrl || ""} />
+            <input
+              name="base_url"
+              placeholder={sub2apiBaseUrl ? `默认: ${sub2apiBaseUrl}；关联账号时可留空` : "https://api.example.com；关联账号时可留空"}
+              autoComplete="off"
+              defaultValue={channel.base_url || channel.baseUrl || (!isEdit ? sub2apiBaseUrl : "")}
+            />
           </label>
           <label>
             <span>API Key</span>
@@ -53,19 +79,19 @@ export function ChannelModal({
           </label>
           <label>
             <span>refreshToken</span>
-            <input name="refresh_token" type="password" placeholder={isEdit ? "留空则不修改" : "sub2Api 自动刷新登录"} autoComplete="off" />
+            <input name="refresh_token" type="password" placeholder={refreshTokenHint} autoComplete="off" />
           </label>
           <label>
             <span>账号邮箱</span>
-            <input name="email" type="email" placeholder="sub2Api 登录邮箱" autoComplete="off" defaultValue={channel.email || ""} />
+            <input name="email" type="email" placeholder="sub2Api 登录邮箱" autoComplete="off" defaultValue={channel.email || (!isEdit ? sub2apiEmail : "")} />
           </label>
           <label>
             <span>登录密码</span>
-            <input name="password" type="password" placeholder={isEdit ? "留空则不修改" : "sub2Api 登录密码"} autoComplete="off" />
+            <input name="password" type="password" placeholder={passwordHint} autoComplete="off" />
           </label>
           <label>
             <span>userId</span>
-            <input name="user_id" placeholder="newApi 必填" autoComplete="off" defaultValue={channel.user_id || channel.userId || ""} />
+            <input name="user_id" placeholder="newApi 必填" autoComplete="off" defaultValue={channel.user_id || channel.userId || (!isEdit ? sub2apiUserId : "")} />
           </label>
           <label>
             <span>预警阈值</span>
@@ -79,13 +105,37 @@ export function ChannelModal({
             <span>模型范围</span>
             <input name="model_scope" defaultValue={channel.model_scope || channel.modelScope || "All models"} autoComplete="off" />
           </label>
+          <label>
+            <span>关联父账号 ID</span>
+            <input name="source_channel_id" placeholder="可选，填父账号 ID 创建子 Key" autoComplete="off" defaultValue={channel.source_channel_id || channel.sourceChannelId || ""} />
+          </label>
           <label className="span-2">
             <span>登录校验 Token</span>
             <input name="turnstile_token" type="password" placeholder={isEdit ? "重新登录时可填" : "sub2Api 登录校验可选"} autoComplete="off" />
           </label>
+          <label className="check-row">
+            <input name="is_enabled" type="checkbox" defaultChecked={Boolean(channel.is_enabled ?? channel.isEnabled ?? true)} />
+            <span>参与调度</span>
+          </label>
           <label className="check-row span-2">
             <input name="is_demo" type="checkbox" defaultChecked={Boolean(channel.is_demo ?? channel.isDemo)} />
             <span>演示探测</span>
+          </label>
+          <label className="check-row">
+            <input
+              name="disable_on_rate_multiplier_change"
+              type="checkbox"
+              defaultChecked={isEdit ? Boolean(channel.disable_on_rate_multiplier_change ?? channel.disableOnRateMultiplierChange) : defaultRateStop}
+            />
+            <span>倍率变动停止调度</span>
+          </label>
+          <label className="check-row">
+            <input
+              name="disable_on_model_sync_failure"
+              type="checkbox"
+              defaultChecked={isEdit ? Boolean(channel.disable_on_model_sync_failure ?? channel.disableOnModelSyncFailure) : defaultModelStop}
+            />
+            <span>模型检测失败停止调度</span>
           </label>
           <div className="modal-actions span-2">
             <span id="formMessage">{message}</span>
@@ -172,6 +222,15 @@ export function KeyModal({
           </label>
           <label className="check-row">
             <input
+              name="is_enabled"
+              type="checkbox"
+              checked={Boolean(draft.is_enabled)}
+              onChange={(event) => onDraft({ is_enabled: event.target.checked })}
+            />
+            <span>参与调度</span>
+          </label>
+          <label className="check-row">
+            <input
               name="is_monitoring"
               type="checkbox"
               checked={Boolean(draft.is_monitoring)}
@@ -187,6 +246,24 @@ export function KeyModal({
               onChange={(event) => onDraft({ is_default_key: event.target.checked })}
             />
             <span>设为默认 Key</span>
+          </label>
+          <label className="check-row">
+            <input
+              name="disable_on_rate_multiplier_change"
+              type="checkbox"
+              checked={Boolean(draft.disable_on_rate_multiplier_change)}
+              onChange={(event) => onDraft({ disable_on_rate_multiplier_change: event.target.checked })}
+            />
+            <span>倍率变动停止调度</span>
+          </label>
+          <label className="check-row">
+            <input
+              name="disable_on_model_sync_failure"
+              type="checkbox"
+              checked={Boolean(draft.disable_on_model_sync_failure)}
+              onChange={(event) => onDraft({ disable_on_model_sync_failure: event.target.checked })}
+            />
+            <span>模型检测失败停止调度</span>
           </label>
           <div className="modal-actions span-2">
             <span id="keyFormMessage">{message}</span>
