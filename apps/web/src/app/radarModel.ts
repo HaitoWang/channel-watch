@@ -82,6 +82,15 @@ export function settingsFromBackend(settings: AnyRecord) {
       settings.sub2api_disable_on_rate_multiplier_change ?? settings.sub2apiDisableOnRateMultiplierChange ?? false,
     sub2api_disable_on_model_sync_failure:
       settings.sub2api_disable_on_model_sync_failure ?? settings.sub2apiDisableOnModelSyncFailure ?? false,
+    pool_enabled: Boolean(settings.pool_enabled ?? settings.poolEnabled),
+    pool_configured: Boolean(settings.pool_configured ?? settings.poolConfigured),
+    pool_base_url: settings.pool_base_url || settings.poolBaseUrl || "",
+    pool_admin_api_key_masked: settings.pool_admin_api_key_masked || settings.poolAdminApiKeyMasked || "",
+    pool_auto_schedule: Boolean(settings.pool_auto_schedule ?? settings.poolAutoSchedule),
+    pool_recover_stable_rounds: settings.pool_recover_stable_rounds ?? settings.poolRecoverStableRounds ?? 2,
+    pool_rate_threshold_default:
+      settings.pool_rate_threshold_default ?? settings.poolRateThresholdDefault ?? "",
+    pool_scan_interval: settings.pool_scan_interval ?? settings.poolScanInterval ?? 120,
     notification_enabled: Boolean(settings.notification_enabled ?? settings.notificationEnabled),
     notification_channel: settings.notification_channel || settings.notificationChannel || "pushplus",
     pushplus_channel: settings.pushplus_channel || settings.pushplusChannel || "wechat",
@@ -92,16 +101,18 @@ export function settingsFromBackend(settings: AnyRecord) {
     notify_low_balance: settings.notify_low_balance ?? settings.notifyLowBalance ?? true,
     notify_rate_change: settings.notify_rate_change ?? settings.notifyRateChange ?? true,
     notify_model_failure: settings.notify_model_failure ?? settings.notifyModelFailure ?? true,
-    sub2api_password: "",
     sub2api_access_token: "",
     sub2api_refresh_token: "",
     sub2api_turnstile_token: "",
+    sub2api_password: "",
+    pool_admin_api_key: "",
     pushplus_token: "",
     serverchan_send_key: "",
     qqbot_secret: "",
-    clear_sub2api_password: false,
     clear_sub2api_tokens: false,
     clear_sub2api_turnstile_token: false,
+    clear_sub2api_password: false,
+    clear_pool_admin_api_key: false,
     clear_pushplus_token: false,
     clear_serverchan_send_key: false,
     clear_qqbot_secret: false,
@@ -110,13 +121,14 @@ export function settingsFromBackend(settings: AnyRecord) {
 
 export function settingsPayloadFromDraft(draft: AnyRecord) {
   const payload = { ...draft };
-  const sub2apiPassword = String(payload.sub2api_password || "").trim();
   const sub2apiAccessToken = String(payload.sub2api_access_token || "").trim();
   const sub2apiRefreshToken = String(payload.sub2api_refresh_token || "").trim();
   const sub2apiTurnstileToken = String(payload.sub2api_turnstile_token || "").trim();
   const pushplusToken = String(payload.pushplus_token || "").trim();
   const serverchanSendKey = String(payload.serverchan_send_key || "").trim();
   const qqbotSecret = String(payload.qqbot_secret || "").trim();
+  const poolAdminApiKey = String(payload.pool_admin_api_key || "").trim();
+  const sub2apiPassword = String(payload.sub2api_password || "").trim();
   payload.sub2api_base_url = String(payload.sub2api_base_url || "").trim();
   payload.sub2api_email = String(payload.sub2api_email || "").trim();
   payload.sub2api_user_id = String(payload.sub2api_user_id || "").trim();
@@ -134,6 +146,12 @@ export function settingsPayloadFromDraft(draft: AnyRecord) {
   else delete payload.serverchan_send_key;
   if (qqbotSecret) payload.qqbot_secret = qqbotSecret;
   else delete payload.qqbot_secret;
+  payload.pool_base_url = String(payload.pool_base_url || "").trim();
+  if (poolAdminApiKey) payload.pool_admin_api_key = poolAdminApiKey;
+  else delete payload.pool_admin_api_key;
+  // 只读展示字段不回传
+  delete payload.pool_admin_api_key_masked;
+  delete payload.pool_configured;
   payload.qqbot_app_id = String(payload.qqbot_app_id || "").trim();
   payload.qqbot_target_id = String(payload.qqbot_target_id || "").trim();
   if ((payload.qqbot_target_type || "subscribers") === "subscribers") payload.qqbot_target_id = "";

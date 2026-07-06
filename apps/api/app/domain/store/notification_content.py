@@ -97,6 +97,42 @@ class NotificationContentMixin:
             lines.append(f"- 另有 {len(parts) - 5} 条失败")
         return lines
 
+    def notification_brief(self, event: dict[str, Any]) -> str:
+        """即时推送文案（QQBot 等）：带 emoji、按类型给出具体数值和处置建议。
+
+        - 余额低：🔴 渠道-Key: 余额剩余 X USD，请尽快充值
+        - 倍率变动：📈 渠道-Key: 倍率 A > B，注意切换避免损失。
+        - 模型异常：🚨 渠道-Key: <模型>, 模型请求异常！注意查看
+        """
+        name = self.notification_key_display_name(event)
+        event_type = str(event.get("type") or "")
+        message = str(event.get("message") or "")
+
+        if event_type == "low_balance":
+            current, _threshold = self.low_balance_values(message)
+            remain = current or self.low_balance_remaining_text(message) or "不足"
+            return f"🔴 {name}: 余额剩余 {remain}，请尽快充值"
+
+        if event_type == "rate_changed":
+            previous, current = self.rate_change_values(message)
+            return f"📈 {name}: 倍率 {previous or '?'} > {current or '?'}，注意切换避免损失。"
+
+        if event_type == "model_probe_failed":
+            models = self.model_failure_models(message)
+            return f"🚨 {name}: {models}，模型请求异常！注意查看"
+
+        return f"⚠️ {name}: {self.notification_event_label(event_type)}"
+
+    def model_failure_models(self, message: str) -> str:
+        """从模型失败详情里提取出错的模型名，用 / 连接（如 gpt-5.5/claude）。"""
+        parts = [part.strip() for part in re.split(r"[；;\n]+", message) if part.strip()]
+        models: list[str] = []
+        for part in parts:
+            name = re.split(r"[:：]", part, 1)[0].strip()
+            if name and name not in models:
+                models.append(name)
+        return "/".join(models[:3]) if models else "模型"
+
     def notification_title(self, event: dict[str, Any]) -> str:
         event_type = str(event.get("type") or "")
         if event_type == "low_balance":

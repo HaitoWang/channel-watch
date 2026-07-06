@@ -190,6 +190,7 @@ class MonitoringMixin:
                 )
             if notify and event_state:
                 self.notify_event(event_state["event"])
+        self.maybe_pool_schedule(channel_id, notify=notify)
         return {
             "ok": ok,
             "result": result_payload,

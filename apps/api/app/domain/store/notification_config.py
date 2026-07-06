@@ -552,11 +552,11 @@ class NotificationConfigMixin:
             return False
         if event_type not in {"low_balance", "rate_changed", "model_probe_failed"}:
             return False
-        title = self.notification_title(event)
+        brief = self.notification_brief(event)
         channel = settings.get("notification_channel") or "pushplus"
         try:
             if channel == "pushplus" and settings.get("pushplus_token"):
-                self.send_pushplus(settings, title, self.event_markdown(event))
+                self.send_pushplus(settings, brief, brief)
                 self.mark_event_notified(int(event["id"]))
                 return True
         except ApiError as exc:
@@ -565,7 +565,7 @@ class NotificationConfigMixin:
             print(f"[pushplus] send failed: {exc}", flush=True)
         try:
             if channel == "serverchan" and settings.get("serverchan_send_key"):
-                self.send_serverchan(settings, title, self.event_markdown(event))
+                self.send_serverchan(settings, brief, brief)
                 self.mark_event_notified(int(event["id"]))
                 return True
         except ApiError as exc:
@@ -574,7 +574,7 @@ class NotificationConfigMixin:
             print(f"[serverchan] send failed: {exc}", flush=True)
         try:
             if channel == "qqbot" and self.qqbot_settings_configured(settings):
-                self.send_qqbot(settings, title, self.event_markdown(event))
+                self.send_qqbot(settings, brief, "")
                 self.mark_event_notified(int(event["id"]))
                 return True
         except ApiError as exc:

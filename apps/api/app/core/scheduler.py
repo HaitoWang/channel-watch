@@ -67,6 +67,39 @@ def start_rate_probe(store: RadarStore, interval_seconds: int) -> threading.Even
     return start_periodic_task("rate-probe", "Rate probe", interval_seconds, store.auto_group_probe_once)
 
 
+def start_pool_scheduler(store: RadarStore, *, default_interval: int = 120) -> threading.Event:
+    """号池自动调度独立定时器。
+
+    每一轮都动态重读号池配置（pool_enabled / pool_scan_interval），
+    因此在设置页修改开关或周期后无需重启即可生效。周期为 0 表示暂停轮询
+    （但探测点触发的即时调度仍然有效）。
+    """
+    stop_event = threading.Event()
+
+    def run() -> None:
+        print("Pool scheduler thread started", flush=True)
+        while not stop_event.is_set():
+            interval = default_interval
+            try:
+                config = store.pool_config()
+                interval = int(config.get("scan_interval") or default_interval)
+                if config.get("enabled") and interval > 0:
+                    result = store.schedule_all_pool_channels()
+                    changed = result.get("changed", 0)
+                    if changed:
+                        print(f"[pool-scheduler] {changed} channel(s) toggled", flush=True)
+            except Exception as exc:  # noqa: BLE001 —— 单轮失败不终止定时器
+                print(f"[pool-scheduler] scan failed: {exc}", flush=True)
+            # 周期无效（0 或未开启）时回落到温和的重查间隔，等待配置被开启
+            wait_seconds = interval if interval and interval > 0 else max(30, default_interval)
+            if stop_event.wait(wait_seconds):
+                break
+
+    thread = threading.Thread(target=run, name="channel-radar-pool-scheduler", daemon=True)
+    thread.start()
+    return stop_event
+
+
 def start_balance_rate_scan(
     store: RadarStore,
     interval_seconds: int,

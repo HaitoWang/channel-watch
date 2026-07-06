@@ -1,6 +1,6 @@
 import type { AnyRecord } from "../types";
 
-/** "sub2api配置" tab: default credentials, default policy, and credential cleanup. */
+/** "sub2api配置" tab: 默认上游凭证（Token 方式）、默认策略、凭证清理。 */
 export function Sub2apiSettingsTab({
   settings,
   draft,
@@ -23,8 +23,8 @@ export function Sub2apiSettingsTab({
       <section className="settings-card span-2">
         <header className="settings-card-head">
           <div>
-            <h3>sub2api配置</h3>
-            <p>新建 sub2Api 渠道时自动带入账号和默认策略</p>
+            <h3>sub2api 默认凭证</h3>
+            <p>新建 sub2Api 渠道时自动带入。查余额需要账号密码或 Token 登录态；带 Cloudflare 的站点会自动用无头浏览器登录</p>
           </div>
           <div className="settings-status">
             <span className={`badge ${sub2apiEnabled ? "good" : "warn"}`}>{sub2apiEnabled ? "已启用" : "未启用"}</span>
@@ -69,7 +69,7 @@ export function Sub2apiSettingsTab({
               name="sub2api_password"
               type="password"
               autoComplete="off"
-              placeholder={sub2apiPasswordMasked ? `已配置: ${sub2apiPasswordMasked}` : "填写登录密码"}
+              placeholder={sub2apiPasswordMasked ? `已配置: ${sub2apiPasswordMasked}` : "查余额/自动登录使用"}
               value={draft.sub2api_password || ""}
               onChange={(event) => onDraft({ sub2api_password: event.target.value })}
             />
@@ -80,7 +80,7 @@ export function Sub2apiSettingsTab({
               name="sub2api_access_token"
               type="password"
               autoComplete="off"
-              placeholder={sub2apiAccessTokenMasked ? `已配置: ${sub2apiAccessTokenMasked}` : "可选，优先使用"}
+              placeholder={sub2apiAccessTokenMasked ? `已配置: ${sub2apiAccessTokenMasked}` : "余额/倍率查询使用"}
               value={draft.sub2api_access_token || ""}
               onChange={(event) => onDraft({ sub2api_access_token: event.target.value })}
             />
@@ -91,7 +91,7 @@ export function Sub2apiSettingsTab({
               name="sub2api_refresh_token"
               type="password"
               autoComplete="off"
-              placeholder={sub2apiRefreshTokenMasked ? `已配置: ${sub2apiRefreshTokenMasked}` : "可选，用于刷新登录"}
+              placeholder={sub2apiRefreshTokenMasked ? `已配置: ${sub2apiRefreshTokenMasked}` : "可选，用于自动刷新登录"}
               value={draft.sub2api_refresh_token || ""}
               onChange={(event) => onDraft({ sub2api_refresh_token: event.target.value })}
             />

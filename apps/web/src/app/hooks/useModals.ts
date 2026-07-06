@@ -41,6 +41,11 @@ export function useModals() {
         is_default_key: boolField(channel, "is_default_key", "isDefaultKey"),
         disable_on_rate_multiplier_change: boolField(channel, "disable_on_rate_multiplier_change", "disableOnRateMultiplierChange"),
         disable_on_model_sync_failure: boolField(channel, "disable_on_model_sync_failure", "disableOnModelSyncFailure"),
+        pool_account_ids: Array.isArray(channel.pool_account_ids ?? channel.poolAccountIds)
+          ? (channel.pool_account_ids ?? channel.poolAccountIds).join(", ")
+          : channel.pool_account_ids || channel.poolAccountIds || "",
+        pool_rate_threshold: channel.pool_rate_threshold ?? channel.poolRateThreshold ?? "",
+        pool_auto_schedule: channel.pool_auto_schedule ?? channel.poolAutoSchedule ?? true,
       },
     });
   }

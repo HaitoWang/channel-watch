@@ -7,6 +7,8 @@ from apps.api.app.core.errors import ApiError
 from apps.api.app.core.utils import bool_value, mask_secret, normalize_base_url, optional_float, utc_now
 from apps.api.app.infrastructure.integrations import login_sub2api_credentials, normalize_key_provider
 
+from .pool_scheduler import parse_account_ids
+
 
 class ChannelMutationMixin:
     def create_channel(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -113,9 +115,10 @@ class ChannelMutationMixin:
                     threshold, api_key, api_key_masked, access_token, refresh_token, user_id, email, password,
                     external_key_id, key_name, key_provider, source_channel_id, is_enabled, is_demo, is_account_parent,
                     is_default_key, monitor_models, disable_on_rate_multiplier_change, disable_on_model_sync_failure,
+                    pool_account_ids, pool_rate_threshold, pool_auto_schedule,
                     created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     name,
@@ -150,6 +153,9 @@ class ChannelMutationMixin:
                     ),
                     disable_on_rate_multiplier_change,
                     disable_on_model_sync_failure,
+                    ",".join(parse_account_ids(payload.get("pool_account_ids") or payload.get("poolAccountIds"))) or None,
+                    optional_float(payload.get("pool_rate_threshold") or payload.get("poolRateThreshold")),
+                    0 if not bool_value(payload.get("pool_auto_schedule", payload.get("poolAutoSchedule", True))) else 1,
                     now,
                     now,
                 ),
@@ -262,6 +268,12 @@ class ChannelMutationMixin:
             "monitorModels": "monitor_models",
             "monitor_interval_seconds": "monitor_interval_seconds",
             "monitorIntervalSeconds": "monitor_interval_seconds",
+            "pool_account_ids": "pool_account_ids",
+            "poolAccountIds": "pool_account_ids",
+            "pool_rate_threshold": "pool_rate_threshold",
+            "poolRateThreshold": "pool_rate_threshold",
+            "pool_auto_schedule": "pool_auto_schedule",
+            "poolAutoSchedule": "pool_auto_schedule",
         }
         assignments: list[str] = []
         params: list[Any] = []
@@ -273,8 +285,12 @@ class ChannelMutationMixin:
             value = payload[key]
             if column == "base_url":
                 value = normalize_base_url(value)
-            elif column in {"threshold", "rate_multiplier"}:
+            elif column in {"threshold", "rate_multiplier", "pool_rate_threshold"}:
                 value = optional_float(value)
+            elif column == "pool_account_ids":
+                value = ",".join(parse_account_ids(value)) or None
+            elif column == "pool_auto_schedule":
+                value = 1 if bool_value(value) else 0
             elif column == "source_channel_id":
                 value = int(value) if value not in {None, ""} else None
             elif column in {"is_enabled", "is_account_parent", "is_monitoring", "disable_on_rate_multiplier_change", "disable_on_model_sync_failure"}:

@@ -48,12 +48,17 @@ export function RadarApp({ onLogout }: { user: AuthUser; onLogout: () => void })
     refreshMonitorFromHeader,
     probeChannel,
     syncKeys,
+    reloginChannel,
     toggleMonitor,
     setDefaultKey,
     probeModelChannel,
     ackEvent,
     ackAllEvents,
     syncAllRates,
+    poolScheduleChannel,
+    poolPreviewChannel,
+    poolRunAll,
+    poolEnableAll,
     openKeyModal,
     updateKeyDraft,
     submitKeyForm,
@@ -126,12 +131,15 @@ export function RadarApp({ onLogout }: { user: AuthUser; onLogout: () => void })
             onToggleExpand={toggleExpandedId}
             onProbe={(id) => probeChannel(id, "/probe")}
             onSyncKeys={syncKeys}
+            onRelogin={reloginChannel}
             onEditChannel={openEditChannel}
             onDeleteChannel={deleteChannel}
             onToggleMonitor={toggleMonitor}
             onEditKey={openKeyModal}
             onSetDefault={setDefaultKey}
             onProbeModels={probeModelChannel}
+            onPoolSchedule={poolScheduleChannel}
+            onPoolPreview={poolPreviewChannel}
           />
           <MonitorPanel
             active={view === "monitor"}
@@ -155,6 +163,8 @@ export function RadarApp({ onLogout }: { user: AuthUser; onLogout: () => void })
             onDraft={updateSettingsDraft}
             onSubmit={submitSettings}
             onTest={testNotification}
+            onPoolRunAll={poolRunAll}
+            onPoolEnableAll={poolEnableAll}
           />
         </main>
       </div>

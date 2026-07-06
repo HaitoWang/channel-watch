@@ -6,7 +6,7 @@ from http.server import ThreadingHTTPServer
 from .api.handler import ApiHandler
 from .core.auth import ADMIN_PASSWORD_PATH, DEFAULT_USERNAME, ensure_admin_credentials
 from .core.config import DB_PATH, DEFAULT_BALANCE_RATE_SCAN_INTERVAL
-from .core.scheduler import start_unified_monitor
+from .core.scheduler import start_pool_scheduler, start_unified_monitor
 from .domain.store import RadarStore
 from .infrastructure.integrations.qqbot_gateway import start_qqbot_gateway
 
@@ -32,6 +32,8 @@ def main() -> None:
     parser.add_argument("--model-monitor-interval", type=int, default=None, help=argparse.SUPPRESS)
     parser.add_argument("--no-model-monitor", action="store_true", help="关闭后台模型监控")
     parser.add_argument("--no-qqbot-gateway", action="store_true", help="关闭 QQBot Gateway 长连接")
+    parser.add_argument("--no-pool-scheduler", action="store_true", help="关闭号池自动调度定时器")
+    parser.add_argument("--pool-scan-interval", type=int, default=120, help="号池自动调度默认周期秒数，默认 120 秒（可在设置页覆盖）")
     args = parser.parse_args()
 
     _, generated_password = ensure_admin_credentials()
@@ -56,6 +58,7 @@ def main() -> None:
         include_model=include_model,
     )
     stop_qqbot_gateway = None if args.no_qqbot_gateway else start_qqbot_gateway(ApiHandler.store)
+    stop_pool_scheduler = None if args.no_pool_scheduler else start_pool_scheduler(ApiHandler.store, default_interval=args.pool_scan_interval)
     server = ThreadingHTTPServer((args.host, args.port), ApiHandler)
     print(f"Channel Radar API running at http://{args.host}:{args.port}/", flush=True)
     try:
@@ -66,6 +69,8 @@ def main() -> None:
         stop_unified_monitor.set()
         if stop_qqbot_gateway is not None:
             stop_qqbot_gateway.set()
+        if stop_pool_scheduler is not None:
+            stop_pool_scheduler.set()
         server.server_close()
 
 

@@ -38,7 +38,7 @@ export function ChannelModal({
     : sub2apiRefreshTokenMasked
       ? `设置已配置: ${sub2apiRefreshTokenMasked}`
       : "sub2Api 自动刷新登录";
-  const passwordHint = isEdit ? "留空则不修改" : sub2apiPasswordMasked ? `设置已配置: ${sub2apiPasswordMasked}` : "sub2Api 登录密码";
+  const passwordHint = isEdit ? "留空则不修改" : sub2apiPasswordMasked ? `设置已配置: ${sub2apiPasswordMasked}` : "查余额/自动登录使用";
   return (
     <div className="modal-backdrop" id="channelModal" onMouseDown={(event) => event.currentTarget === event.target && onClose()}>
       <section className="modal-panel" role="dialog" aria-modal="true" aria-labelledby="channelModalTitle">
@@ -264,6 +264,38 @@ export function KeyModal({
               onChange={(event) => onDraft({ disable_on_model_sync_failure: event.target.checked })}
             />
             <span>模型检测失败停止调度</span>
+          </label>
+          <div className="settings-divider span-2" role="separator">号池自动调度（根据本 Key 上游指标开关我方号池账号）</div>
+          <label className="span-2">
+            <span>映射号池账号 ID</span>
+            <input
+              name="pool_account_ids"
+              placeholder="我方 sub2api account id，多个用逗号分隔，如 12,15,18"
+              autoComplete="off"
+              value={draft.pool_account_ids || ""}
+              onChange={(event) => onDraft({ pool_account_ids: event.target.value })}
+            />
+          </label>
+          <label>
+            <span>倍率阈值（超过则倒挂禁用）</span>
+            <input
+              name="pool_rate_threshold"
+              type="number"
+              step="0.0001"
+              min="0"
+              placeholder="留空则用全局默认"
+              value={draft.pool_rate_threshold ?? ""}
+              onChange={(event) => onDraft({ pool_rate_threshold: event.target.value })}
+            />
+          </label>
+          <label className="check-row">
+            <input
+              name="pool_auto_schedule"
+              type="checkbox"
+              checked={Boolean(draft.pool_auto_schedule)}
+              onChange={(event) => onDraft({ pool_auto_schedule: event.target.checked })}
+            />
+            <span>参与号池自动调度</span>
           </label>
           <div className="modal-actions span-2">
             <span id="keyFormMessage">{message}</span>

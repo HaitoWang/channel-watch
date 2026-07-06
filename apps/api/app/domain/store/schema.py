@@ -120,6 +120,16 @@ class SchemaMixin:
             self.ensure_column(conn, "channels", "disable_on_rate_multiplier_change", "INTEGER NOT NULL DEFAULT 0")
             self.ensure_column(conn, "channels", "disable_on_model_sync_failure", "INTEGER NOT NULL DEFAULT 0")
             self.ensure_column(conn, "channels", "scheduling_disabled_reason", "TEXT")
+            # 号池自动调度（Pool Auto Scheduler）——上游 channel 映射到我方 sub2api 号池账号
+            self.ensure_column(conn, "channels", "pool_account_ids", "TEXT")
+            self.ensure_column(conn, "channels", "pool_rate_threshold", "REAL")
+            self.ensure_column(conn, "channels", "pool_auto_schedule", "INTEGER NOT NULL DEFAULT 1")
+            self.ensure_column(conn, "channels", "pool_desired_state", "TEXT")
+            self.ensure_column(conn, "channels", "pool_last_pushed_state", "TEXT")
+            self.ensure_column(conn, "channels", "pool_recover_streak", "INTEGER NOT NULL DEFAULT 0")
+            self.ensure_column(conn, "channels", "pool_last_reason", "TEXT")
+            self.ensure_column(conn, "channels", "pool_last_error", "TEXT")
+            self.ensure_column(conn, "channels", "pool_last_pushed_at", "TEXT")
             self.ensure_column(conn, "events", "notified_at", "TEXT")
             self.normalize_channel_hierarchy(conn)
             count = conn.execute("SELECT COUNT(*) AS count FROM channels").fetchone()["count"]

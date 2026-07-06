@@ -39,21 +39,20 @@ class ProbeServiceMixin:
 
     def unified_monitor_scan_once(self, *, include_balance: bool = True, include_rate: bool = True, include_model: bool = True) -> dict[str, Any]:
         print("[unified-monitor] scan started", flush=True)
-        balance = self.auto_probe_once(notify=False) if include_balance else {"total": 0, "ok": 0, "failed": 0}
-        rate = self.auto_group_probe_once(notify=False) if include_rate else {"total": 0, "ok": 0, "failed": 0}
-        model = self.auto_model_probe_once(notify=False) if include_model else {"total": 0, "due": 0, "ok": 0, "failed": 0, "skipped": 0}
+        # notify=True：仅在余额低于阈值 / 模型出错 / 倍率变动时各自发通知（去重靠 notified_at），
+        # 不再无条件推送监控汇总。
+        balance = self.auto_probe_once(notify=True) if include_balance else {"total": 0, "ok": 0, "failed": 0}
+        rate = self.auto_group_probe_once(notify=True) if include_rate else {"total": 0, "ok": 0, "failed": 0}
+        model = self.auto_model_probe_once(notify=True) if include_model else {"total": 0, "due": 0, "ok": 0, "failed": 0, "skipped": 0}
         stats = {"balance": balance, "rate": rate, "model": model}
-        events = self.monitor_summary_events(include_notified=True)
-        sent = self.send_monitor_summary_notification(stats, events, always=True)
         print(
             "[unified-monitor] "
             f"balance {balance['ok']}/{balance['total']} ok, {balance['failed']} failed; "
             f"rate {rate['ok']}/{rate['total']} ok, {rate['failed']} failed; "
-            f"model {model['ok']}/{model.get('due', model['total'])} ok, {model['failed']} failed; "
-            f"summary {'sent' if sent else 'skipped'} ({len(events)} events)",
+            f"model {model['ok']}/{model.get('due', model['total'])} ok, {model['failed']} failed",
             flush=True,
         )
-        return {"stats": stats, "events": len(events), "sent": sent}
+        return {"stats": stats}
 
     def auto_probe_once(self, *, notify: bool = True) -> dict[str, int]:
         channel_ids = self.enabled_channel_ids()
@@ -113,24 +112,15 @@ class ProbeServiceMixin:
             raise ApiError(404, "渠道不存在")
         row = self.balance_probe_row(row)
         channel_id = int(row["id"])
-        row = self.ensure_sub2api_session(channel_id, row)
         try:
-            result = demo_balance_result(row) if row["is_demo"] else query_real_balance(row)
+            row, result = self.sub2api_probe_call(
+                channel_id,
+                row,
+                lambda r: demo_balance_result(r) if r["is_demo"] else query_real_balance(r),
+            )
         except ApiError as exc:
-            if self.should_retry_sub2api_session(row, exc):
-                row = self.ensure_sub2api_session(channel_id, row, force_refresh=True)
-                try:
-                    result = demo_balance_result(row) if row["is_demo"] else query_real_balance(row)
-                except ApiError as retry_exc:
-                    self._record_probe_failure(channel_id, row, retry_exc.message)
-                    raise
-                except Exception as retry_exc:
-                    message = f"探测失败: {retry_exc}"
-                    self._record_probe_failure(channel_id, row, message)
-                    raise ApiError(502, message) from retry_exc
-            else:
-                self._record_probe_failure(channel_id, row, exc.message)
-                raise
+            self._record_probe_failure(channel_id, row, exc.message)
+            raise
         except Exception as exc:
             message = f"探测失败: {exc}"
             self._record_probe_failure(channel_id, row, message)
@@ -145,7 +135,10 @@ class ProbeServiceMixin:
         }
 
     def should_retry_sub2api_session(self, row: sqlite3.Row, exc: ApiError) -> bool:
-        if row["is_demo"] or row["platform"] != "sub2Api" or exc.status not in {401, 403}:
+        if row["is_demo"] or row["platform"] != "sub2Api":
+            return False
+        token_expired = "TOKEN_EXPIRED" in str(exc.message or "").upper()
+        if exc.status not in {401, 403} and not token_expired:
             return False
         return bool(row["refresh_token"] or (row["email"] and row["password"]))
 
@@ -161,7 +154,7 @@ class ProbeServiceMixin:
         if not row:
             raise ApiError(404, "渠道不存在")
         try:
-            groups = self.load_group_catalog(row)
+            row, groups = self.sub2api_probe_call(channel_id, row, lambda r: self.load_group_catalog(r))
             result = find_group(groups, row["group_id"]) or (groups[0] if groups else None)
             if not result:
                 raise ApiError(502, "未获取到可用分组")
@@ -224,6 +217,7 @@ class ProbeServiceMixin:
                 )
             if notify:
                 self.notify_event(event_state["event"] if event_state else None, send_updates=True)
+        self.maybe_pool_schedule(channel_id, notify=notify)
         return {
             "ok": True,
             "result": {**result, "changed": changed, "previous_rate": previous_rate},
@@ -318,6 +312,14 @@ class ProbeServiceMixin:
             "events": self.list_events(acknowledged=False),
         }
 
+    def _sub2api_global_turnstile(self) -> str | None:
+        """读取全局配置的 turnstile 校验 token（用于自动重登时的 CF 兜底）。"""
+        try:
+            token = (self.sub2api_settings(include_secret=True).get("sub2api_turnstile_token") or "").strip()
+        except Exception:  # noqa: BLE001 —— 配置读取异常不应影响探测
+            return None
+        return token or None
+
     def ensure_sub2api_session(
         self,
         channel_id: int,
@@ -336,10 +338,18 @@ class ProbeServiceMixin:
             except ApiError:
                 auth = None
         if not auth and row["email"] and row["password"]:
-            auth = login_sub2api_credentials(row["base_url"], row["email"], row["password"], turnstile_token)
+            # 密码登录：优先用调用方传入的 turnstile，否则回落全局配置（CF 兜底）
+            token = turnstile_token or self._sub2api_global_turnstile()
+            auth = login_sub2api_credentials(row["base_url"], row["email"], row["password"], token)
         if not auth or not auth.get("access_token"):
             return row
+        return self._persist_sub2api_tokens(channel_id, row, auth)
+
+    def _persist_sub2api_tokens(self, channel_id: int, row: sqlite3.Row, auth: dict[str, str | None]) -> sqlite3.Row:
+        """把刷新/登录拿到的 token 写回整个账号族（父账号 + 全部子 Key），
+        避免多个 Key 各自重复刷新导致（一次性轮换的）refresh_token 互相失效。"""
         now = utc_now()
+        family_root = row["source_channel_id"] or channel_id
         with self.connect() as conn:
             conn.execute(
                 """
@@ -348,11 +358,52 @@ class ProbeServiceMixin:
                     refresh_token = COALESCE(?, refresh_token),
                     user_id = COALESCE(?, user_id),
                     updated_at = ?
-                WHERE id = ?
+                WHERE id = ? OR id = ? OR source_channel_id = ?
                 """,
-                (auth.get("access_token"), auth.get("refresh_token"), auth.get("user_id"), now, channel_id),
+                (auth.get("access_token"), auth.get("refresh_token"), auth.get("user_id"), now, channel_id, family_root, family_root),
             )
         return self.get_channel_row(channel_id) or row
+
+    def relogin_sub2api(self, channel_id: int, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        """手动重新登录：用已存（或本次传入）的 email/password + 一次性 turnstile(CF) 重登，
+        拿到新的 access/refresh token 并写回账号族。用于 refresh_token 也失效、
+        且上游登录带 Cloudflare 校验的账号。"""
+        row = self.get_channel_row(channel_id)
+        if not row:
+            raise ApiError(404, "渠道不存在")
+        if row["platform"] != "sub2Api":
+            raise ApiError(400, "仅 sub2Api 渠道支持重新登录")
+        p = payload or {}
+        email = str(p.get("email") or row["email"] or "").strip()
+        password = str(p.get("password") or row["password"] or "").strip()
+        turnstile = str(p.get("turnstile_token") or p.get("turnstileToken") or "").strip() or None
+        if not (email and password):
+            raise ApiError(400, "该渠道未保存账号密码，无法自动重新登录；请直接更新 accessToken / refreshToken")
+        auth = login_sub2api_credentials(row["base_url"], email, password, turnstile)
+        if not auth.get("access_token"):
+            raise ApiError(502, "重新登录未返回 access_token")
+        # 若本次传入了新的 email/password，一并持久化（父账号级）
+        if p.get("email") or p.get("password"):
+            with self.connect() as conn:
+                conn.execute(
+                    "UPDATE channels SET email = COALESCE(?, email), password = COALESCE(?, password), updated_at = ? WHERE id = ?",
+                    (email or None, password or None, utc_now(), int(row["source_channel_id"] or channel_id)),
+                )
+        row = self._persist_sub2api_tokens(channel_id, row, auth)
+        return {"ok": True, "channel": self.public_channel(row)}
+
+    def sub2api_probe_call(self, channel_id: int, row: sqlite3.Row, call, *, turnstile_token: str | None = None):
+        """确保 sub2api 会话有效并执行 call(row)；遇 401/403（含 TOKEN_EXPIRED）
+        自动重登刷新后重试一次。返回 (最新 row, 结果)。"""
+        row = self.ensure_sub2api_session(channel_id, row, turnstile_token)
+        try:
+            return row, call(row)
+        except ApiError as exc:
+            if not self.should_retry_sub2api_session(row, exc):
+                raise
+        row = self.ensure_sub2api_session(channel_id, row, turnstile_token, force_refresh=True)
+        return row, call(row)
+
 
     def _apply_balance_result(self, channel_id: int, row: sqlite3.Row, result: dict[str, Any], *, notify: bool = True) -> None:
         remaining = optional_float(result.get("remaining"))
@@ -409,6 +460,7 @@ class ProbeServiceMixin:
         else:
             self.resolve_event(channel_id, "low_balance")
         self.resolve_event(channel_id, "probe_failed")
+        self.maybe_pool_schedule(channel_id, notify=notify)
 
     def _record_probe_failure(self, channel_id: int, row: sqlite3.Row, message: str, *, kind: str = "balance") -> None:
         now = utc_now()
@@ -429,3 +481,4 @@ class ProbeServiceMixin:
                 (channel_id, kind, json.dumps({"error": message}, ensure_ascii=False), now),
             )
         self.ensure_event(channel_id, "probe_failed", "critical", f"{row['name']} 探测失败", message)
+        self.maybe_pool_schedule(channel_id)

@@ -28,6 +28,21 @@ def sub2api_access_token(row: sqlite3.Row) -> str:
     return token
 
 
+def _looks_like_cloudflare_block(exc: ApiError) -> bool:
+    """判断登录失败是否为 Cloudflare / Turnstile 拦截（需要浏览器兜底）。"""
+    msg = str(exc.message or "").lower()
+    if exc.status in {403, 503}:
+        return True
+    return (
+        "cloudflare" in msg
+        or "不是 json" in msg
+        or "just a moment" in msg
+        or "attention required" in msg
+        or "turnstile" in msg
+        or "challenge" in msg
+    )
+
+
 def login_sub2api_credentials(
     base_url: str,
     email: str,
@@ -38,15 +53,29 @@ def login_sub2api_credentials(
     body = {"email": email, "password": password}
     if turnstile_token:
         body["turnstile_token"] = turnstile_token
-    payload = http_json(
-        "POST",
-        f"{url}/api/v1/auth/login",
-        {"Origin": url, "Referer": f"{url}/login"},
-        body,
-    )
+    try:
+        payload = http_json(
+            "POST",
+            f"{url}/api/v1/auth/login",
+            {"Origin": url, "Referer": f"{url}/login"},
+            body,
+        )
+    except ApiError as exc:
+        # 直连被 Cloudflare / Turnstile 拦截时，回落无头浏览器登录
+        if _looks_like_cloudflare_block(exc):
+            from .playwright_bridge import login_via_playwright
+
+            return login_via_playwright(url, email, password)
+        raise
     auth = extract_auth_tokens(payload)
     if not auth.get("access_token"):
-        raise ApiError(502, "sub2Api 登录成功但没有返回 access_token")
+        # 返回了内容但没有 token（可能软性挑战），再用浏览器兜底一次
+        from .playwright_bridge import login_via_playwright
+
+        try:
+            return login_via_playwright(url, email, password)
+        except ApiError as exc:
+            raise ApiError(502, "sub2Api 登录成功但没有返回 access_token") from exc
     return auth
 
 

@@ -63,6 +63,26 @@ export function useRadarActions({ radar, loadRadar, notify, setLoadingIds, setSy
     }
   }
 
+  async function reloginChannel(channel: AnyRecord) {
+    const id = Number(channel.id);
+    if (!id) return;
+    const turnstile = window.prompt(
+      `重新登录「${channel.name || id}」\n若上游登录需要 Cloudflare 校验，请粘贴 turnstile token（没有可留空直接确定）：`,
+      "",
+    );
+    if (turnstile === null) return; // 用户取消
+    addLoading(id);
+    try {
+      await channelsApi.relogin(id, turnstile.trim() ? { turnstile_token: turnstile.trim() } : {});
+      notify("重新登录成功，凭证已更新");
+      await loadRadar({ quiet: true });
+    } catch (error) {
+      notify(`重新登录失败：${(error as Error).message}`);
+    } finally {
+      clearLoading(id);
+    }
+  }
+
   async function toggleMonitor(channel: AnyRecord) {
     try {
       await channelsApi.update(channel.id, { is_monitoring: !boolField(channel, "is_monitoring", "isMonitoring") });
@@ -138,7 +158,8 @@ export function useRadarActions({ radar, loadRadar, notify, setLoadingIds, setSy
     if (!keyModal) return;
     const id = Number(keyModal.channel.id);
     const provider = keyModal.draft.key_provider || null;
-    const payload = {
+    const poolRateThreshold = String(keyModal.draft.pool_rate_threshold ?? "").trim();
+    const payload: AnyRecord = {
       name: String(keyModal.draft.name || "").trim(),
       key_provider: provider,
       monitor_models: splitModels(keyModal.draft.monitor_models || providerDefaultModels(provider).join(",")),
@@ -147,7 +168,11 @@ export function useRadarActions({ radar, loadRadar, notify, setLoadingIds, setSy
       is_monitoring: Boolean(keyModal.draft.is_monitoring),
       disable_on_rate_multiplier_change: Boolean(keyModal.draft.disable_on_rate_multiplier_change),
       disable_on_model_sync_failure: Boolean(keyModal.draft.disable_on_model_sync_failure),
+      pool_account_ids: String(keyModal.draft.pool_account_ids || "").trim(),
+      pool_auto_schedule: Boolean(keyModal.draft.pool_auto_schedule),
     };
+    if (poolRateThreshold !== "") payload.pool_rate_threshold = Number(poolRateThreshold);
+    else payload.pool_rate_threshold = null;
     if (!payload.name) {
       modals.setKeyMessage("Key 名称不能为空");
       return;
@@ -230,15 +255,77 @@ export function useRadarActions({ radar, loadRadar, notify, setLoadingIds, setSy
     }
   }
 
+  async function poolScheduleChannel(id: number) {
+    addLoading(id);
+    try {
+      const result: AnyRecord = await channelsApi.poolSchedule(id);
+      if (result?.skipped) notify(`号池调度已跳过：${result.skipped}`);
+      else if (result?.changed) notify(`号池账号已${result.target === "enabled" ? "启用" : "禁用"}`);
+      else notify(`号池状态未变化（${result?.reason || "无需调整"}）`);
+      await loadRadar({ quiet: true });
+    } catch (error) {
+      notify((error as Error).message);
+    } finally {
+      clearLoading(id);
+    }
+  }
+
+  async function poolPreviewChannel(id: number) {
+    addLoading(id);
+    try {
+      const preview: AnyRecord = await channelsApi.poolSchedulePreview(id);
+      const ids = Array.isArray(preview.account_ids) ? preview.account_ids : [];
+      if (!ids.length) {
+        notify("该渠道未映射号池账号");
+        return;
+      }
+      const target = preview.target_state === "enabled" ? "启用" : preview.target_state === "disabled" ? "禁用" : "维持";
+      notify(`预览：目标${target} · 账号[${ids.join(",")}] · ${preview.reason || ""}`);
+    } catch (error) {
+      notify((error as Error).message);
+    } finally {
+      clearLoading(id);
+    }
+  }
+
+  async function poolRunAll() {
+    try {
+      const result: AnyRecord = await channelsApi.poolScheduleRunAll();
+      if (result?.skipped) notify(`号池全量调度已跳过：${result.skipped}`);
+      else notify(`号池全量调度完成：评估 ${result?.evaluated ?? 0} 个，切换 ${result?.changed ?? 0} 个`);
+      await loadRadar({ quiet: true });
+    } catch (error) {
+      notify((error as Error).message);
+    }
+  }
+
+  async function poolEnableAll() {
+    if (!window.confirm("确定把所有已映射的号池账号全部启用吗？这会立即调用我方 sub2api 开启对应账号。")) return;
+    try {
+      const result: AnyRecord = await channelsApi.poolEnableAll();
+      const errs = Array.isArray(result?.errors) ? result.errors : [];
+      if (errs.length) notify(`已启用 ${result?.accounts_enabled ?? 0} 个账号，${errs.length} 个渠道失败：${errs[0]}`);
+      else notify(`已启用全部号池账号：${result?.channels_enabled ?? 0} 个渠道 / ${result?.accounts_enabled ?? 0} 个账号`);
+      await loadRadar({ quiet: true });
+    } catch (error) {
+      notify((error as Error).message);
+    }
+  }
+
   return {
     probeChannel,
     syncKeys,
+    reloginChannel,
     toggleMonitor,
     setDefaultKey,
     probeModelChannel,
     ackEvent,
     ackAllEvents,
     syncAllRates,
+    poolScheduleChannel,
+    poolPreviewChannel,
+    poolRunAll,
+    poolEnableAll,
     submitKeyForm,
     submitChannel,
     deleteChannel,

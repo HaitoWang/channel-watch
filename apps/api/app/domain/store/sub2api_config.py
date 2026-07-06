@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from apps.api.app.core.errors import ApiError
-from apps.api.app.core.utils import bool_value, mask_secret, normalize_base_url
+from apps.api.app.core.utils import bool_value, mask_secret, normalize_base_url, optional_float
 
 
 class Sub2apiConfigMixin:
@@ -18,6 +18,14 @@ class Sub2apiConfigMixin:
         "sub2api_turnstile_token": "",
         "sub2api_disable_on_rate_multiplier_change": "0",
         "sub2api_disable_on_model_sync_failure": "0",
+        # 号池自动调度（Pool Auto Scheduler）——根据上游指标开关我方 sub2api 号池账号
+        "pool_enabled": "0",
+        "pool_base_url": "",
+        "pool_admin_api_key": "",
+        "pool_auto_schedule": "0",
+        "pool_recover_stable_rounds": "2",
+        "pool_rate_threshold_default": "",
+        "pool_scan_interval": "120",
     }
 
     def sub2api_settings(self, *, include_secret: bool = False) -> dict[str, Any]:
@@ -36,7 +44,14 @@ class Sub2apiConfigMixin:
                   'sub2api_user_id',
                   'sub2api_turnstile_token',
                   'sub2api_disable_on_rate_multiplier_change',
-                  'sub2api_disable_on_model_sync_failure'
+                  'sub2api_disable_on_model_sync_failure',
+                  'pool_enabled',
+                  'pool_base_url',
+                  'pool_admin_api_key',
+                  'pool_auto_schedule',
+                  'pool_recover_stable_rounds',
+                  'pool_rate_threshold_default',
+                  'pool_scan_interval'
                 )
                 """
             ).fetchall()
@@ -54,6 +69,19 @@ class Sub2apiConfigMixin:
         user_id = values["sub2api_user_id"].strip()
         turnstile_token = values["sub2api_turnstile_token"].strip()
         configured = bool(base_url and (access_token or refresh_token or (email and password)))
+
+        pool_base_url = normalize_base_url(values["pool_base_url"])
+        pool_admin_api_key = values["pool_admin_api_key"].strip()
+        pool_configured = bool(pool_base_url and pool_admin_api_key)
+        try:
+            pool_recover_stable_rounds = max(1, int(values["pool_recover_stable_rounds"] or 2))
+        except (TypeError, ValueError):
+            pool_recover_stable_rounds = 2
+        pool_rate_threshold_default = optional_float(values["pool_rate_threshold_default"])
+        try:
+            pool_scan_interval = max(0, int(values["pool_scan_interval"] or 120))
+        except (TypeError, ValueError):
+            pool_scan_interval = 120
         result = {
             "sub2api_enabled": bool_value(values["sub2api_enabled"]),
             "sub2apiEnabled": bool_value(values["sub2api_enabled"]),
@@ -77,6 +105,22 @@ class Sub2apiConfigMixin:
             "sub2apiDisableOnRateMultiplierChange": bool_value(values["sub2api_disable_on_rate_multiplier_change"]),
             "sub2api_disable_on_model_sync_failure": bool_value(values["sub2api_disable_on_model_sync_failure"]),
             "sub2apiDisableOnModelSyncFailure": bool_value(values["sub2api_disable_on_model_sync_failure"]),
+            "pool_enabled": bool_value(values["pool_enabled"]),
+            "poolEnabled": bool_value(values["pool_enabled"]),
+            "pool_configured": pool_configured,
+            "poolConfigured": pool_configured,
+            "pool_base_url": pool_base_url,
+            "poolBaseUrl": pool_base_url,
+            "pool_admin_api_key_masked": mask_secret(pool_admin_api_key),
+            "poolAdminApiKeyMasked": mask_secret(pool_admin_api_key),
+            "pool_auto_schedule": bool_value(values["pool_auto_schedule"]),
+            "poolAutoSchedule": bool_value(values["pool_auto_schedule"]),
+            "pool_recover_stable_rounds": pool_recover_stable_rounds,
+            "poolRecoverStableRounds": pool_recover_stable_rounds,
+            "pool_rate_threshold_default": pool_rate_threshold_default,
+            "poolRateThresholdDefault": pool_rate_threshold_default,
+            "pool_scan_interval": pool_scan_interval,
+            "poolScanInterval": pool_scan_interval,
             "sub2api_updated_at": updated_at,
             "sub2apiUpdatedAt": updated_at,
         }
@@ -89,6 +133,8 @@ class Sub2apiConfigMixin:
             result["sub2apiRefreshToken"] = refresh_token
             result["sub2api_turnstile_token"] = turnstile_token
             result["sub2apiTurnstileToken"] = turnstile_token
+            result["pool_admin_api_key"] = pool_admin_api_key
+            result["poolAdminApiKey"] = pool_admin_api_key
         return result
 
     def update_sub2api_settings(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -104,6 +150,8 @@ class Sub2apiConfigMixin:
                 "sub2api_disable_on_model_sync_failure",
                 "sub2apiDisableOnModelSyncFailure",
             ),
+            "pool_enabled": ("pool_enabled", "poolEnabled"),
+            "pool_auto_schedule": ("pool_auto_schedule", "poolAutoSchedule"),
         }
         for target, keys in bool_fields.items():
             value = self.payload_value(payload, *keys)
@@ -145,6 +193,35 @@ class Sub2apiConfigMixin:
         if bool_value(self.payload_value(payload, "clear_sub2api_turnstile_token", "clearSub2apiTurnstileToken")):
             updates["sub2api_turnstile_token"] = ""
 
+        pool_base_url = self.payload_value(payload, "pool_base_url", "poolBaseUrl")
+        if pool_base_url is not None:
+            updates["pool_base_url"] = normalize_base_url(pool_base_url)
+
+        pool_admin_api_key = self.payload_value(payload, "pool_admin_api_key", "poolAdminApiKey")
+        if pool_admin_api_key is not None and str(pool_admin_api_key).strip():
+            updates["pool_admin_api_key"] = str(pool_admin_api_key).strip()
+        if bool_value(self.payload_value(payload, "clear_pool_admin_api_key", "clearPoolAdminApiKey")):
+            updates["pool_admin_api_key"] = ""
+
+        pool_recover = self.payload_value(payload, "pool_recover_stable_rounds", "poolRecoverStableRounds")
+        if pool_recover is not None and str(pool_recover).strip() != "":
+            try:
+                updates["pool_recover_stable_rounds"] = str(max(1, int(pool_recover)))
+            except (TypeError, ValueError) as exc:
+                raise ApiError(400, "恢复稳定轮数必须是正整数") from exc
+
+        pool_rate_default = self.payload_value(payload, "pool_rate_threshold_default", "poolRateThresholdDefault")
+        if pool_rate_default is not None:
+            parsed = optional_float(pool_rate_default)
+            updates["pool_rate_threshold_default"] = "" if parsed is None else str(parsed)
+
+        pool_scan_interval = self.payload_value(payload, "pool_scan_interval", "poolScanInterval")
+        if pool_scan_interval is not None and str(pool_scan_interval).strip() != "":
+            try:
+                updates["pool_scan_interval"] = str(max(0, int(pool_scan_interval)))
+            except (TypeError, ValueError) as exc:
+                raise ApiError(400, "号池调度周期必须是数字（秒）") from exc
+
         next_values = {key: str(current.get(key) or "") for key in self.sub2api_defaults}
         next_values.update(updates)
         next_enabled = bool_value(next_values["sub2api_enabled"])
@@ -157,6 +234,14 @@ class Sub2apiConfigMixin:
             raise ApiError(400, "启用 sub2Api 默认配置前请填写 Base URL")
         if next_enabled and not (next_access_token or next_refresh_token or (next_email and next_password)):
             raise ApiError(400, "启用 sub2Api 默认配置前请填写 token 或 email/password")
+
+        next_pool_enabled = bool_value(next_values["pool_enabled"])
+        next_pool_base_url = normalize_base_url(next_values["pool_base_url"])
+        next_pool_admin_api_key = next_values["pool_admin_api_key"].strip()
+        if next_pool_enabled and not next_pool_base_url:
+            raise ApiError(400, "启用号池自动调度前请填写号池 Base URL")
+        if next_pool_enabled and not next_pool_admin_api_key:
+            raise ApiError(400, "启用号池自动调度前请填写号池 Admin API Key")
 
         if updates:
             self.save_app_settings(updates)

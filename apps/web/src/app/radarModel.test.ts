@@ -38,13 +38,15 @@ describe("field / boolField", () => {
 describe("settingsPayloadFromDraft", () => {
   it("drops empty secrets and clears target id for subscriber mode", () => {
     const payload = settingsPayloadFromDraft({
-      sub2api_password: "  ",
+      sub2api_access_token: "  ",
+      pool_admin_api_key: "  ",
       pushplus_token: " tok ",
       qqbot_secret: "",
       qqbot_target_type: "subscribers",
       qqbot_target_id: "123",
     });
-    expect(payload).not.toHaveProperty("sub2api_password");
+    expect(payload).not.toHaveProperty("sub2api_access_token");
+    expect(payload).not.toHaveProperty("pool_admin_api_key");
     expect(payload).not.toHaveProperty("qqbot_secret");
     expect(payload.pushplus_token).toBe("tok");
     expect(payload.qqbot_target_id).toBe("");

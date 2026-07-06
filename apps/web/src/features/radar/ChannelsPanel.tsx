@@ -13,12 +13,15 @@ export function ChannelsPanel({
   onToggleExpand,
   onProbe,
   onSyncKeys,
+  onRelogin,
   onEditChannel,
   onDeleteChannel,
   onToggleMonitor,
   onEditKey,
   onSetDefault,
   onProbeModels,
+  onPoolSchedule,
+  onPoolPreview,
 }: {
   active: boolean;
   accounts: AnyRecord[];
@@ -29,12 +32,15 @@ export function ChannelsPanel({
   onToggleExpand: (id: number) => void;
   onProbe: (id: number) => void;
   onSyncKeys: (id: number) => void;
+  onRelogin: (channel: AnyRecord) => void;
   onEditChannel: (channel: AnyRecord) => void;
   onDeleteChannel: (channel: AnyRecord) => void;
   onToggleMonitor: (channel: AnyRecord) => void;
   onEditKey: (channel: AnyRecord) => void;
   onSetDefault: (id: number) => void;
   onProbeModels: (id: number) => void;
+  onPoolSchedule: (id: number) => void;
+  onPoolPreview: (id: number) => void;
 }) {
   const visibleAccounts: AnyRecord[] = accounts
     .map((account: AnyRecord) => ({
@@ -71,6 +77,7 @@ export function ChannelsPanel({
               loadingIds={loadingIds}
               onProbe={onProbe}
               onSyncKeys={onSyncKeys}
+              onRelogin={onRelogin}
               onEditChannel={onEditChannel}
               onDeleteChannel={onDeleteChannel}
               onToggleExpand={onToggleExpand}
@@ -78,6 +85,8 @@ export function ChannelsPanel({
               onEditKey={onEditKey}
               onSetDefault={onSetDefault}
               onProbeModels={onProbeModels}
+              onPoolSchedule={onPoolSchedule}
+              onPoolPreview={onPoolPreview}
             />
           ))
         ) : (
@@ -95,6 +104,7 @@ function AccountRow({
   loadingIds,
   onProbe,
   onSyncKeys,
+  onRelogin,
   onEditChannel,
   onDeleteChannel,
   onToggleExpand,
@@ -102,6 +112,8 @@ function AccountRow({
   onEditKey,
   onSetDefault,
   onProbeModels,
+  onPoolSchedule,
+  onPoolPreview,
 }: {
   account: AnyRecord;
   expanded: boolean;
@@ -109,6 +121,7 @@ function AccountRow({
   loadingIds: Set<number>;
   onProbe: (id: number) => void;
   onSyncKeys: (id: number) => void;
+  onRelogin: (channel: AnyRecord) => void;
   onEditChannel: (channel: AnyRecord) => void;
   onDeleteChannel: (channel: AnyRecord) => void;
   onToggleExpand: (id: number) => void;
@@ -116,6 +129,8 @@ function AccountRow({
   onEditKey: (channel: AnyRecord) => void;
   onSetDefault: (id: number) => void;
   onProbeModels: (id: number) => void;
+  onPoolSchedule: (id: number) => void;
+  onPoolPreview: (id: number) => void;
 }) {
   const id = Number(account.id);
   const children = account.children || [];
@@ -160,6 +175,11 @@ function AccountRow({
           <span className="icon icon-sync" aria-hidden="true"></span>
           {loading ? "同步中" : "同步 Key"}
         </button>
+        {(account.platform === "sub2Api" || account.platform === "sub2api") ? (
+          <button className="ghost-button" type="button" disabled={loading} onClick={() => onRelogin(account)}>
+            重新登录
+          </button>
+        ) : null}
         <button className="ghost-button" type="button" onClick={() => onEditChannel(account)}>
           编辑
         </button>
@@ -182,6 +202,8 @@ function AccountRow({
                 onEditKey={onEditKey}
                 onSetDefault={onSetDefault}
                 onProbeModels={onProbeModels}
+                onPoolSchedule={onPoolSchedule}
+                onPoolPreview={onPoolPreview}
               />
             ))
           ) : (
@@ -200,6 +222,8 @@ function KeyRow({
   onEditKey,
   onSetDefault,
   onProbeModels,
+  onPoolSchedule,
+  onPoolPreview,
 }: {
   channel: AnyRecord;
   loading: boolean;
@@ -207,6 +231,8 @@ function KeyRow({
   onEditKey: (channel: AnyRecord) => void;
   onSetDefault: (id: number) => void;
   onProbeModels: (id: number) => void;
+  onPoolSchedule: (id: number) => void;
+  onPoolPreview: (id: number) => void;
 }) {
   const id = Number(channel.id);
   const models = channel.monitor_models || channel.monitorModels || [];
@@ -214,6 +240,8 @@ function KeyRow({
   const monitoring = boolField(channel, "is_monitoring", "isMonitoring");
   const isDefault = boolField(channel, "is_default_key", "isDefaultKey");
   const enabled = boolField(channel, "is_enabled", "isEnabled");
+  const poolIds = channel.pool_account_ids ?? channel.poolAccountIds ?? [];
+  const hasPoolMapping = Array.isArray(poolIds) ? poolIds.length > 0 : String(poolIds || "").trim().length > 0;
   const monitorChecked = channel.monitor_last_checked_at || channel.monitorLastCheckedAt;
   const monitorError = channel.monitor_last_error || channel.monitorLastError;
   const disabledReason = channel.scheduling_disabled_reason || channel.schedulingDisabledReason;
@@ -238,6 +266,7 @@ function KeyRow({
           类型: {provider.label} · 模型: {models.join(", ") || "未配置"}
         </span>
         <span>{lastLine}</span>
+        <PoolScheduleBadge account={channel} />
       </div>
       <div className="row-actions">
         <button className={`ghost-button ${monitoring ? "" : "is-muted"}`} type="button" onClick={() => onToggleMonitor(channel)}>
@@ -254,7 +283,42 @@ function KeyRow({
           <span className="icon icon-radar" aria-hidden="true"></span>
           {loading ? "探测中" : "模型探测"}
         </button>
+        {hasPoolMapping ? (
+          <>
+            <button className="ghost-button" type="button" disabled={loading} onClick={() => onPoolPreview(id)}>
+              号池预览
+            </button>
+            <button className="ghost-button" type="button" disabled={loading} onClick={() => onPoolSchedule(id)}>
+              立即调度
+            </button>
+          </>
+        ) : null}
       </div>
     </div>
+  );
+}
+
+/** 只读展示某渠道的号池自动调度状态：期望态 + 最近原因 + 失败提示。 */
+function PoolScheduleBadge({ account }: { account: AnyRecord }) {
+  const accountIds = account.pool_account_ids ?? account.poolAccountIds ?? [];
+  const ids: string[] = Array.isArray(accountIds)
+    ? accountIds
+    : String(accountIds || "")
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+  if (!ids.length) return null;
+  const desired = account.pool_desired_state ?? account.poolDesiredState;
+  const pushed = account.pool_last_pushed_state ?? account.poolLastPushedState;
+  const reason = account.pool_last_reason ?? account.poolLastReason;
+  const error = account.pool_last_error ?? account.poolLastError;
+  const state = pushed || desired;
+  const stateLabel = state === "enabled" ? "已启用" : state === "disabled" ? "已禁用" : "待定";
+  const stateClass = state === "enabled" ? "good" : state === "disabled" ? "warn" : "";
+  return (
+    <span className="pool-badge" title={reason || ""}>
+      号池 {ids.length} 账号 · <span className={`badge ${stateClass}`}>{stateLabel}</span>
+      {error ? <span className="badge bad">下发失败</span> : null}
+    </span>
   );
 }
