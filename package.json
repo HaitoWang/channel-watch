@@ -9,6 +9,9 @@
     "api:dev": "python3 -m apps.api.app.main --host 127.0.0.1 --port 4176",
     "web:dev": "npm --workspace apps/web run dev",
     "web:build": "npm --workspace apps/web run build",
-    "web:preview": "npm --workspace apps/web run preview"
+    "web:preview": "npm --workspace apps/web run preview",
+    "test": "npm run test:api && npm run test:web",
+    "test:api": "python3 -m unittest discover -s apps/api/tests -t .",
+    "test:web": "npm --workspace apps/web run test"
   }
 }
