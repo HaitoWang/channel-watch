@@ -116,6 +116,15 @@ export function MonitorSettingsTab({
             />
             <span>模型监控失败</span>
           </label>
+          <label className="settings-toggle-row">
+            <input
+              name="notify_pool_schedule"
+              type="checkbox"
+              checked={Boolean(draft.notify_pool_schedule)}
+              onChange={(event) => onDraft({ notify_pool_schedule: event.target.checked })}
+            />
+            <span>号池启停调度</span>
+          </label>
         </div>
       </section>
     </>

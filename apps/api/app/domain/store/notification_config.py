@@ -44,6 +44,7 @@ class NotificationConfigMixin:
         "notify_low_balance": "1",
         "notify_rate_change": "1",
         "notify_model_failure": "1",
+        "notify_pool_schedule": "1",
     }
 
     def notification_settings(self, *, include_secret: bool = False) -> dict[str, Any]:
@@ -80,7 +81,8 @@ class NotificationConfigMixin:
                   'qqbot_last_event_at',
                   'notify_low_balance',
                   'notify_rate_change',
-                  'notify_model_failure'
+                  'notify_model_failure',
+                  'notify_pool_schedule'
                 )
                 """
             ).fetchall()
@@ -216,6 +218,8 @@ class NotificationConfigMixin:
             "qqbotLastEventAt": values["qqbot_last_event_at"],
             "notify_low_balance": bool_value(values["notify_low_balance"]),
             "notifyLowBalance": bool_value(values["notify_low_balance"]),
+            "notify_pool_schedule": bool_value(values["notify_pool_schedule"]),
+            "notifyPoolSchedule": bool_value(values["notify_pool_schedule"]),
             "notify_rate_change": bool_value(values["notify_rate_change"]),
             "notifyRateChange": bool_value(values["notify_rate_change"]),
             "notify_model_failure": bool_value(values["notify_model_failure"]),
@@ -250,6 +254,7 @@ class NotificationConfigMixin:
             "notify_low_balance": ("notify_low_balance", "notifyLowBalance"),
             "notify_rate_change": ("notify_rate_change", "notifyRateChange"),
             "notify_model_failure": ("notify_model_failure", "notifyModelFailure"),
+            "notify_pool_schedule": ("notify_pool_schedule", "notifyPoolSchedule"),
         }
         for target, keys in bool_fields.items():
             value = self.payload_value(payload, *keys)
@@ -544,13 +549,15 @@ class NotificationConfigMixin:
         settings = self.notification_settings(include_secret=True)
         if not settings.get("notification_enabled"):
             return False
-        if event_type == "low_balance" and not settings.get("notify_low_balance"):
+        if event_type in {"low_balance", "balance_burnout"} and not settings.get("notify_low_balance"):
             return False
         if event_type == "rate_changed" and not settings.get("notify_rate_change"):
             return False
         if event_type == "model_probe_failed" and not settings.get("notify_model_failure"):
             return False
-        if event_type not in {"low_balance", "rate_changed", "model_probe_failed"}:
+        if event_type in {"pool_scheduled", "pool_schedule_failed"} and not settings.get("notify_pool_schedule"):
+            return False
+        if event_type not in {"low_balance", "balance_burnout", "rate_changed", "model_probe_failed", "pool_scheduled", "pool_schedule_failed"}:
             return False
         brief = self.notification_brief(event)
         channel = settings.get("notification_channel") or "pushplus"

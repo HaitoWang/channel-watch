@@ -23,7 +23,6 @@ class MonitoringMixin:
                 FROM channels c
                 LEFT JOIN channels parent ON parent.id = c.source_channel_id
                 WHERE c.is_monitoring = 1
-                  AND c.is_enabled = 1
                   AND c.is_account_parent = 0
                   AND c.api_key IS NOT NULL
                 ORDER BY
@@ -66,7 +65,6 @@ class MonitoringMixin:
                 SELECT *
                 FROM channels
                 WHERE is_monitoring = 1
-                  AND is_enabled = 1
                   AND is_account_parent = 0
                   AND api_key IS NOT NULL
                 ORDER BY id
@@ -105,6 +103,45 @@ class MonitoringMixin:
             checked = checked.replace(tzinfo=timezone.utc)
         return (now - checked).total_seconds() >= interval
 
+    def _pool_proxy_test_account(self, row: sqlite3.Row) -> str | None:
+        """该 Key 是否应走「我方 sub2api 代测」：映射了号池账号 + 号池连接已配置。
+        返回第一个映射的 account_id，否则 None（回落直连探测）。"""
+        try:
+            from .pool_scheduler import parse_account_ids
+
+            account_ids = parse_account_ids(row["pool_account_ids"])
+        except Exception:  # noqa: BLE001
+            return None
+        if not account_ids:
+            return None
+        config = self.pool_config()
+        if not config.get("base_url") or not config.get("admin_api_key"):
+            return None
+        return account_ids[0]
+
+    def _probe_model_via_pool(self, account_id: str, model: str) -> dict[str, Any]:
+        """借我方 sub2api 测账号，返回与 query_model_probe 一致的结构。"""
+        from apps.api.app.infrastructure.integrations.pool_sub2api import test_account
+
+        config = self.pool_config()
+        outcome = test_account(config["base_url"], config["admin_api_key"], account_id, model)
+        if not outcome.get("ok"):
+            raise ApiError(502, outcome.get("message") or "号池代测失败")
+        if outcome.get("transient"):
+            # 限流/繁忙：账号正常，不判故障
+            return {
+                "ok": True,
+                "model": model,
+                "protocol": "pool-test",
+                "summary": outcome.get("message") or f"号池账号 {account_id} 繁忙",
+            }
+        return {
+            "ok": True,
+            "model": model,
+            "protocol": "pool-test",
+            "summary": f"号池账号 {account_id} 代测正常",
+        }
+
     def probe_models(self, channel_id: int, *, notify: bool = True) -> dict[str, Any]:
         row = self.get_channel_row(channel_id)
         if not row:
@@ -113,12 +150,18 @@ class MonitoringMixin:
             raise ApiError(400, "只有子 Key 可以启动模型监控")
 
         models = self.monitor_models_for_provider(row["key_provider"], row["monitor_models"])
+        # 若该 Key 映射了号池账号且号池配置齐全，改由「我方 sub2api」代测该账号
+        # （借 admin key，避开监控直连上游被 Cloudflare/Seton 盾或 524 拦截）。
+        proxy_account_id = self._pool_proxy_test_account(row)
         results: list[dict[str, Any]] = []
         failures: list[str] = []
         for model in models:
             started = time.monotonic()
             try:
-                result = query_model_probe(row, model)
+                if proxy_account_id is not None:
+                    result = self._probe_model_via_pool(proxy_account_id, model)
+                else:
+                    result = query_model_probe(row, model)
                 latency_ms = int((time.monotonic() - started) * 1000)
                 results.append({**result, "latency_ms": latency_ms, "latencyMs": latency_ms})
             except ApiError as exc:
@@ -128,7 +171,7 @@ class MonitoringMixin:
                     {
                         "ok": False,
                         "model": model,
-                        "protocol": "messages" if "claude" in model.lower() else "responses",
+                        "protocol": "pool-test" if proxy_account_id is not None else ("messages" if "claude" in model.lower() else "responses"),
                         "message": exc.message,
                         "latency_ms": latency_ms,
                         "latencyMs": latency_ms,

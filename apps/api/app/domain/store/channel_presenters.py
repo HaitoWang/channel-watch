@@ -11,6 +11,33 @@ from .channel_constants import DEFAULT_MONITOR_MODELS, PROVIDER_MONITOR_MODELS
 
 
 class ChannelPresenterMixin:
+    def _pool_current_margin(self, data: dict[str, Any]) -> float | None:
+        """当前毛利率 %：(有效卖价 - 上游成本倍率) / 有效卖价。卖价缺失则返回 None。"""
+        sell = optional_float(data.get("pool_sell_rate"))
+        if sell is None:
+            settings = getattr(self, "_pool_margin_settings_cache", None)
+            if settings is None:
+                try:
+                    settings = self.sub2api_settings()
+                except Exception:  # noqa: BLE001
+                    settings = {}
+                self._pool_margin_settings_cache = settings
+            sell = optional_float(settings.get("pool_sell_rate"))
+        cost = optional_float(data.get("rate_multiplier"))
+        if not sell or sell <= 0 or cost is None:
+            return None
+        return round((sell - cost) / sell * 100, 1)
+
+    def _pool_burn_hours(self, data: dict[str, Any]) -> float | None:
+        """余额燃尽预计小时数（仅父账号有意义，取自 estimate_burn_hours）。"""
+        if data.get("source_channel_id") is not None:
+            return None
+        try:
+            est = self.estimate_burn_hours(int(data["id"]))
+        except Exception:  # noqa: BLE001
+            return None
+        return est["hours"] if est else None
+
     def public_channel(self, row: sqlite3.Row) -> dict[str, Any]:
         data = dict(row)
         masked_key = data.get("api_key_masked")
@@ -95,6 +122,14 @@ class ChannelPresenterMixin:
             "poolLastError": data.get("pool_last_error"),
             "pool_last_pushed_at": data.get("pool_last_pushed_at"),
             "poolLastPushedAt": data.get("pool_last_pushed_at"),
+            "pool_sell_rate": optional_float(data.get("pool_sell_rate")),
+            "poolSellRate": optional_float(data.get("pool_sell_rate")),
+            "pool_target_margin": optional_float(data.get("pool_target_margin")),
+            "poolTargetMargin": optional_float(data.get("pool_target_margin")),
+            "pool_current_margin": self._pool_current_margin(data),
+            "poolCurrentMargin": self._pool_current_margin(data),
+            "pool_burn_hours": self._pool_burn_hours(data),
+            "poolBurnHours": self._pool_burn_hours(data),
             "monitor_models": self.monitor_models_for_provider(data.get("key_provider"), data.get("monitor_models")),
             "monitorModels": self.monitor_models_for_provider(data.get("key_provider"), data.get("monitor_models")),
             "monitor_interval_seconds": int(data.get("monitor_interval_seconds") or 60),

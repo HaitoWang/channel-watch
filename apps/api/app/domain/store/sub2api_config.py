@@ -26,6 +26,17 @@ class Sub2apiConfigMixin:
         "pool_recover_stable_rounds": "2",
         "pool_rate_threshold_default": "",
         "pool_scan_interval": "120",
+        # 盈利护栏（Profit Guard）——只填卖价+毛利率，系统自动算倒挂阈值
+        "pool_sell_rate": "",          # 对外卖价倍率（默认）
+        "pool_target_margin": "",      # 目标毛利率 %（默认，如 20 表示 20%）
+        "pool_auto_priority": "0",     # 自动按成本排序号池 priority
+        "pool_burnout_warn_hours": "6",  # 余额燃尽预警窗口（小时），0=关闭
+        "pool_proxy": "",              # 全局代理（过 Cloudflare/Seton 盾用，如 http://127.0.0.1:7897）
+        # 首 token 慢探测：最近 N 次流式请求里，首 token 超阈值的次数达标即判"慢"停调度
+        "pool_slow_ttft_seconds": "15",   # 首 token 超过多少秒算慢，0=关闭
+        "pool_slow_count": "5",           # 慢请求达到多少次就停调度
+        "pool_slow_sample": "10",         # 取最近多少次流式请求作样本
+        "pool_slow_min_sample": "5",      # 样本少于此数则跳过不判（避免误杀）
     }
 
     def sub2api_settings(self, *, include_secret: bool = False) -> dict[str, Any]:
@@ -51,7 +62,16 @@ class Sub2apiConfigMixin:
                   'pool_auto_schedule',
                   'pool_recover_stable_rounds',
                   'pool_rate_threshold_default',
-                  'pool_scan_interval'
+                  'pool_scan_interval',
+                  'pool_sell_rate',
+                  'pool_target_margin',
+                  'pool_auto_priority',
+                  'pool_burnout_warn_hours',
+                  'pool_proxy',
+                  'pool_slow_ttft_seconds',
+                  'pool_slow_count',
+                  'pool_slow_sample',
+                  'pool_slow_min_sample'
                 )
                 """
             ).fetchall()
@@ -82,6 +102,27 @@ class Sub2apiConfigMixin:
             pool_scan_interval = max(0, int(values["pool_scan_interval"] or 120))
         except (TypeError, ValueError):
             pool_scan_interval = 120
+        pool_sell_rate = optional_float(values["pool_sell_rate"])
+        pool_target_margin = optional_float(values["pool_target_margin"])
+        pool_auto_priority = bool_value(values["pool_auto_priority"])
+        try:
+            pool_burnout_warn_hours = max(0.0, float(values["pool_burnout_warn_hours"] or 6))
+        except (TypeError, ValueError):
+            pool_burnout_warn_hours = 6.0
+        pool_proxy = values["pool_proxy"].strip()
+        pool_slow_ttft_seconds = optional_float(values["pool_slow_ttft_seconds"])
+        try:
+            pool_slow_count = max(1, int(values["pool_slow_count"] or 5))
+        except (TypeError, ValueError):
+            pool_slow_count = 5
+        try:
+            pool_slow_sample = max(1, int(values["pool_slow_sample"] or 10))
+        except (TypeError, ValueError):
+            pool_slow_sample = 10
+        try:
+            pool_slow_min_sample = max(1, int(values["pool_slow_min_sample"] or 5))
+        except (TypeError, ValueError):
+            pool_slow_min_sample = 5
         result = {
             "sub2api_enabled": bool_value(values["sub2api_enabled"]),
             "sub2apiEnabled": bool_value(values["sub2api_enabled"]),
@@ -121,6 +162,24 @@ class Sub2apiConfigMixin:
             "poolRateThresholdDefault": pool_rate_threshold_default,
             "pool_scan_interval": pool_scan_interval,
             "poolScanInterval": pool_scan_interval,
+            "pool_sell_rate": pool_sell_rate,
+            "poolSellRate": pool_sell_rate,
+            "pool_target_margin": pool_target_margin,
+            "poolTargetMargin": pool_target_margin,
+            "pool_auto_priority": pool_auto_priority,
+            "poolAutoPriority": pool_auto_priority,
+            "pool_burnout_warn_hours": pool_burnout_warn_hours,
+            "poolBurnoutWarnHours": pool_burnout_warn_hours,
+            "pool_proxy": pool_proxy,
+            "poolProxy": pool_proxy,
+            "pool_slow_ttft_seconds": pool_slow_ttft_seconds,
+            "poolSlowTtftSeconds": pool_slow_ttft_seconds,
+            "pool_slow_count": pool_slow_count,
+            "poolSlowCount": pool_slow_count,
+            "pool_slow_sample": pool_slow_sample,
+            "poolSlowSample": pool_slow_sample,
+            "pool_slow_min_sample": pool_slow_min_sample,
+            "poolSlowMinSample": pool_slow_min_sample,
             "sub2api_updated_at": updated_at,
             "sub2apiUpdatedAt": updated_at,
         }
@@ -152,6 +211,7 @@ class Sub2apiConfigMixin:
             ),
             "pool_enabled": ("pool_enabled", "poolEnabled"),
             "pool_auto_schedule": ("pool_auto_schedule", "poolAutoSchedule"),
+            "pool_auto_priority": ("pool_auto_priority", "poolAutoPriority"),
         }
         for target, keys in bool_fields.items():
             value = self.payload_value(payload, *keys)
@@ -221,6 +281,46 @@ class Sub2apiConfigMixin:
                 updates["pool_scan_interval"] = str(max(0, int(pool_scan_interval)))
             except (TypeError, ValueError) as exc:
                 raise ApiError(400, "号池调度周期必须是数字（秒）") from exc
+
+        pool_sell_rate = self.payload_value(payload, "pool_sell_rate", "poolSellRate")
+        if pool_sell_rate is not None:
+            parsed = optional_float(pool_sell_rate)
+            updates["pool_sell_rate"] = "" if parsed is None else str(parsed)
+
+        pool_target_margin = self.payload_value(payload, "pool_target_margin", "poolTargetMargin")
+        if pool_target_margin is not None:
+            parsed = optional_float(pool_target_margin)
+            updates["pool_target_margin"] = "" if parsed is None else str(parsed)
+
+        pool_burnout = self.payload_value(payload, "pool_burnout_warn_hours", "poolBurnoutWarnHours")
+        if pool_burnout is not None and str(pool_burnout).strip() != "":
+            parsed = optional_float(pool_burnout)
+            if parsed is None or parsed < 0:
+                raise ApiError(400, "燃尽预警窗口必须是非负数字（小时）")
+            updates["pool_burnout_warn_hours"] = str(parsed)
+
+        pool_proxy = self.payload_value(payload, "pool_proxy", "poolProxy")
+        if pool_proxy is not None:
+            updates["pool_proxy"] = str(pool_proxy or "").strip()
+
+        slow_ttft = self.payload_value(payload, "pool_slow_ttft_seconds", "poolSlowTtftSeconds")
+        if slow_ttft is not None:
+            parsed = optional_float(slow_ttft)
+            if parsed is None or parsed < 0:
+                raise ApiError(400, "首 token 慢阈值必须是非负数字（秒）")
+            updates["pool_slow_ttft_seconds"] = str(parsed)
+
+        for pkey, pcamel, target, label in (
+            ("pool_slow_count", "poolSlowCount", "pool_slow_count", "慢请求次数"),
+            ("pool_slow_sample", "poolSlowSample", "pool_slow_sample", "样本数"),
+            ("pool_slow_min_sample", "poolSlowMinSample", "pool_slow_min_sample", "最少样本数"),
+        ):
+            val = self.payload_value(payload, pkey, pcamel)
+            if val is not None and str(val).strip() != "":
+                try:
+                    updates[target] = str(max(1, int(val)))
+                except (TypeError, ValueError) as exc:
+                    raise ApiError(400, f"{label}必须是正整数") from exc
 
         next_values = {key: str(current.get(key) or "") for key in self.sub2api_defaults}
         next_values.update(updates)

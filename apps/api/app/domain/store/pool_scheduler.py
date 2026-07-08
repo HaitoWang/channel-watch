@@ -20,7 +20,7 @@ from typing import Any
 
 from apps.api.app.core.errors import ApiError
 from apps.api.app.core.utils import bool_value, optional_float, utc_now
-from apps.api.app.infrastructure.integrations.pool_sub2api import set_account_schedulable
+from apps.api.app.infrastructure.integrations.pool_sub2api import set_account_priority, set_account_schedulable
 
 
 def parse_account_ids(value: Any) -> list[str]:
@@ -50,7 +50,132 @@ class PoolSchedulerMixin:
             "recover_rounds": int(settings.get("pool_recover_stable_rounds") or 2),
             "rate_threshold_default": optional_float(settings.get("pool_rate_threshold_default")),
             "scan_interval": int(settings.get("pool_scan_interval") or 120),
+            "sell_rate_default": optional_float(settings.get("pool_sell_rate")),
+            "target_margin_default": optional_float(settings.get("pool_target_margin")),
+            "auto_priority": bool(settings.get("pool_auto_priority")),
+            "burnout_warn_hours": optional_float(settings.get("pool_burnout_warn_hours")),
+            "slow_ttft_seconds": optional_float(settings.get("pool_slow_ttft_seconds")),
+            "slow_count": int(settings.get("pool_slow_count") or 5),
+            "slow_sample": int(settings.get("pool_slow_sample") or 10),
+            "slow_min_sample": int(settings.get("pool_slow_min_sample") or 5),
         }
+
+    @staticmethod
+    def _margin_threshold(sell_rate: float | None, target_margin: float | None) -> float | None:
+        """毛利护栏公式：有效倒挂阈值 = 卖价 ÷ (1 + 目标毛利率)。
+
+        卖价按倍率计（如 2.0），目标毛利率按百分数（如 20 表示 20%）。
+        上游倍率超过此阈值即毛利跌破目标，应禁用。
+        """
+        if sell_rate is None or sell_rate <= 0:
+            return None
+        margin = (target_margin or 0) / 100.0
+        if margin <= -1:
+            return None
+        return sell_rate / (1 + margin)
+
+    def resolve_rate_threshold(self, row: sqlite3.Row, config: dict[str, Any]) -> float | None:
+        """按优先级解析该 Key 的倒挂阈值：
+        1) Key 绝对阈值  2) Key 卖价/毛利算出  3) 全局卖价/毛利算出  4) 全局绝对阈值。"""
+        explicit = optional_float(row["pool_rate_threshold"])
+        if explicit is not None:
+            return explicit
+        key_calc = self._margin_threshold(
+            optional_float(row["pool_sell_rate"]),
+            optional_float(row["pool_target_margin"]),
+        )
+        if key_calc is not None:
+            return key_calc
+        global_calc = self._margin_threshold(config.get("sell_rate_default"), config.get("target_margin_default"))
+        if global_calc is not None:
+            return global_calc
+        return config.get("rate_threshold_default")
+
+    def current_margin(self, row: sqlite3.Row, config: dict[str, Any]) -> float | None:
+        """当前毛利率 %（基于该 Key 有效卖价与上游倍率）：(卖价-成本)/卖价。"""
+        sell = optional_float(row["pool_sell_rate"]) or config.get("sell_rate_default")
+        cost = optional_float(row["rate_multiplier"])
+        if not sell or sell <= 0 or cost is None:
+            return None
+        return round((sell - cost) / sell * 100, 1)
+
+    def estimate_burn_hours(self, channel_id: int) -> dict[str, Any] | None:
+        """根据 history 近若干条余额点估算燃尽时间。
+
+        取最近 ≤20 条 balance 记录，按时间正序，用净消耗（余额下降）算平均
+        速率（USD/小时）。滤掉充值造成的余额突增。数据不足则返回 None（不误报）。
+        返回 {hours, rate_per_hour, current}。
+        """
+        from datetime import datetime
+
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT remaining, created_at
+                FROM history
+                WHERE channel_id = ? AND kind = 'balance' AND remaining IS NOT NULL
+                ORDER BY created_at DESC
+                LIMIT 20
+                """,
+                (channel_id,),
+            ).fetchall()
+        points: list[tuple[datetime, float]] = []
+        for r in rows:
+            try:
+                ts = datetime.fromisoformat(str(r["created_at"]))
+            except (ValueError, TypeError):
+                continue
+            points.append((ts, float(r["remaining"])))
+        if len(points) < 3:
+            return None
+        points.reverse()  # 时间正序
+
+        # 累加"下降段"消耗与时长；余额上升（充值）跳过
+        spent = 0.0
+        hours = 0.0
+        for (t0, b0), (t1, b1) in zip(points, points[1:]):
+            dt = (t1 - t0).total_seconds() / 3600.0
+            if dt <= 0:
+                continue
+            drop = b0 - b1
+            if drop > 0:  # 只统计净消耗
+                spent += drop
+                hours += dt
+        if hours <= 0 or spent <= 0:
+            return None
+        rate = spent / hours  # USD/小时
+        current = points[-1][1]
+        if rate <= 0:
+            return None
+        return {
+            "hours": round(current / rate, 1),
+            "rate_per_hour": round(rate, 4),
+            "current": current,
+        }
+
+    def maybe_burnout_warning(self, channel_id: int, row: sqlite3.Row, *, notify: bool = True) -> None:
+        """余额燃尽预警：预计耗尽时间低于窗口则推送（父账号级）。"""
+        config = self.pool_config()
+        window = config.get("burnout_warn_hours")
+        if not window or window <= 0:
+            return
+        est = self.estimate_burn_hours(channel_id)
+        if not est:
+            return
+        if est["hours"] > window:
+            self.resolve_event(channel_id, "balance_burnout")
+            return
+        unit = row["unit"] or "USD"
+        daily = est["rate_per_hour"] * 24
+        event_state = self.ensure_event(
+            channel_id,
+            "balance_burnout",
+            "warning",
+            f"{row['name']} 余额即将耗尽",
+            f"余额预计 {est['hours']:g} 小时后耗尽（当前 {est['current']:g} {unit}，日耗 ~{daily:.0f} {unit}），建议充值。",
+        )
+        if notify and event_state:
+            self.notify_event(event_state["event"])
 
     def pool_channel_settings(self, row: sqlite3.Row) -> dict[str, Any]:
         account_ids = parse_account_ids(row["pool_account_ids"])
@@ -100,14 +225,51 @@ class PoolSchedulerMixin:
 
         return reasons
 
+    def _slow_ttft_reason(self, account_ids: list[str], config: dict[str, Any]) -> str | None:
+        """首 token 慢检测：查该账号最近 N 次流式请求，超阈值次数达标则返回红信号。
+
+        样本不足 / 未配置 / 查询失败 → 返回 None（不误杀）。
+        """
+        threshold_s = config.get("slow_ttft_seconds")
+        if not threshold_s or threshold_s <= 0:
+            return None
+        if not account_ids:
+            return None
+        base = config.get("base_url")
+        key = config.get("admin_api_key")
+        if not base or not key:
+            return None
+        from apps.api.app.infrastructure.integrations.pool_sub2api import recent_first_token_ms
+
+        sample = int(config.get("slow_sample") or 10)
+        need_count = int(config.get("slow_count") or 5)
+        min_sample = int(config.get("slow_min_sample") or 5)
+        threshold_ms = threshold_s * 1000
+        # 多个映射账号取最差的一个判定
+        for account_id in account_ids:
+            try:
+                ttfts = recent_first_token_ms(base, key, account_id, sample)
+            except Exception:  # noqa: BLE001 —— 查询失败不误杀
+                continue
+            if len(ttfts) < min_sample:
+                continue  # 样本不足，跳过
+            slow_n = sum(1 for x in ttfts if x > threshold_ms)
+            if slow_n >= need_count:
+                worst = max(ttfts) / 1000
+                return f"首 token 慢：最近 {len(ttfts)} 次里 {slow_n} 次超 {threshold_s:g}s（最高 {worst:.0f}s）"
+        return None
+
     def compute_pool_decision(self, row: sqlite3.Row, config: dict[str, Any]) -> dict[str, Any]:
         """纯计算：返回目标态、原因、下一轮 streak，不做任何写入或下发。"""
         channel = self.pool_channel_settings(row)
-        rate_threshold = channel["rate_threshold"]
-        if rate_threshold is None:
-            rate_threshold = config.get("rate_threshold_default")
+        # 阈值优先级：Key 绝对阈值 → Key 卖价/毛利 → 全局卖价/毛利 → 全局绝对阈值
+        rate_threshold = self.resolve_rate_threshold(row, config)
 
         reasons = self._pool_signals(row, rate_threshold)
+        # 首 token 慢检测（账号级，需查我方 sub2api 用量记录；失败/样本不足不误杀）
+        slow_reason = self._slow_ttft_reason(channel["account_ids"], config)
+        if slow_reason:
+            reasons.append(slow_reason)
         current_streak = int(row["pool_recover_streak"] or 0)
         last_pushed = row["pool_last_pushed_state"]
         recover_rounds = max(1, int(config.get("recover_rounds") or 2))
@@ -159,6 +321,13 @@ class PoolSchedulerMixin:
         if pushed_state is not None:
             assignments.append("pool_last_pushed_state = ?")
             params.append(pushed_state)
+            # 真正下发了开关时，同步本地 is_enabled，保持界面与号池一致：
+            # 启用 → is_enabled=1 且清除停调原因；禁用 → is_enabled=0。
+            if pushed_state == "enabled":
+                assignments.append("is_enabled = 1")
+                assignments.append("scheduling_disabled_reason = NULL")
+            elif pushed_state == "disabled":
+                assignments.append("is_enabled = 0")
         if pushed_at is not None:
             assignments.append("pool_last_pushed_at = ?")
             params.append(pushed_at)
@@ -256,6 +425,9 @@ class PoolSchedulerMixin:
             error=None,
         )
         self.resolve_event(channel_id, "pool_schedule_failed")
+        # 本分支只在「实际翻转下发」时执行；先关闭旧的调度事件，确保启用⇄禁用
+        # 每次翻转都生成新事件并重新通知（否则复用旧事件会被 notified_at 去重挡掉）。
+        self.resolve_event(channel_id, "pool_scheduled")
         severity = "info" if enabled else "warning"
         accounts_desc = "、".join(decision["account_ids"])
         event_state = self.ensure_event(
@@ -332,7 +504,78 @@ class PoolSchedulerMixin:
                 outcome = {"ok": False, "error": exc.message}
             results.append({"channel_id": channel_id, **outcome})
         changed = sum(1 for item in results if item.get("changed"))
-        return {"ok": True, "evaluated": len(results), "changed": changed, "results": results}
+        reorder = None
+        if config.get("auto_priority"):
+            try:
+                reorder = self.reorder_pool_priority(config)
+            except Exception as exc:  # noqa: BLE001
+                reorder = {"ok": False, "error": str(exc)}
+        return {"ok": True, "evaluated": len(results), "changed": changed, "results": results, "reorder": reorder}
+
+    def reorder_pool_priority(self, config: dict[str, Any] | None = None) -> dict[str, Any]:
+        """按成本给「健康且启用」的号池账号排序 priority：倍率升序（次要按模型延迟），
+        最便宜的排最前（priority 最小）。步长 10 留插入空间，仅在变化时下发（幂等）。"""
+        config = config or self.pool_config()
+        if not config.get("base_url") or not config.get("admin_api_key"):
+            return {"ok": False, "error": "号池连接未配置"}
+
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT id, name, pool_account_ids, rate_multiplier, monitor_latency_ms,
+                       pool_last_pushed_state, pool_last_priority
+                FROM channels
+                WHERE pool_account_ids IS NOT NULL
+                  AND TRIM(pool_account_ids) != ''
+                  AND pool_auto_schedule = 1
+                """
+            ).fetchall()
+
+        # 只排「未被禁用」的（禁用态账号已关停，不参与成本排序）
+        candidates = []
+        for r in rows:
+            if r["pool_last_pushed_state"] == "disabled":
+                continue
+            rate = optional_float(r["rate_multiplier"])
+            if rate is None:
+                continue  # 倍率未知不参与排序，避免脏数据
+            latency = r["monitor_latency_ms"] if r["monitor_latency_ms"] is not None else 10**9
+            for account_id in parse_account_ids(r["pool_account_ids"]):
+                candidates.append({
+                    "channel_id": int(r["id"]),
+                    "account_id": account_id,
+                    "rate": rate,
+                    "latency": latency,
+                    "last_priority": r["pool_last_priority"],
+                })
+        # 成本升序 → 延迟升序
+        candidates.sort(key=lambda c: (c["rate"], c["latency"]))
+
+        pushed = 0
+        errors: list[str] = []
+        seen_channels: dict[int, int] = {}
+        for idx, c in enumerate(candidates):
+            priority = (idx + 1) * 10
+            if c["last_priority"] == priority:
+                seen_channels.setdefault(c["channel_id"], priority)
+                continue  # 幂等：未变化不下发
+            try:
+                set_account_priority(config["base_url"], config["admin_api_key"], c["account_id"], priority)
+                pushed += 1
+                seen_channels[c["channel_id"]] = priority
+            except ApiError as exc:
+                errors.append(f"账号 {c['account_id']}: {exc.message}")
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"账号 {c['account_id']}: {exc}")
+        # 记录每个 channel 最新下发的 priority（用最小值代表）
+        now = utc_now()
+        with self.connect() as conn:
+            for channel_id, priority in seen_channels.items():
+                conn.execute(
+                    "UPDATE channels SET pool_last_priority = ?, updated_at = ? WHERE id = ?",
+                    (priority, now, channel_id),
+                )
+        return {"ok": not errors, "ranked": len(candidates), "pushed": pushed, "errors": errors}
 
     def enable_all_pool_accounts(self, *, notify: bool = True) -> dict[str, Any]:
         """一键启用：把所有已映射的号池账号强制置为可调度（无视指标信号）。

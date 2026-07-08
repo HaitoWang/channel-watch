@@ -45,6 +45,8 @@ export function useModals() {
           ? (channel.pool_account_ids ?? channel.poolAccountIds).join(", ")
           : channel.pool_account_ids || channel.poolAccountIds || "",
         pool_rate_threshold: channel.pool_rate_threshold ?? channel.poolRateThreshold ?? "",
+        pool_sell_rate: channel.pool_sell_rate ?? channel.poolSellRate ?? "",
+        pool_target_margin: channel.pool_target_margin ?? channel.poolTargetMargin ?? "",
         pool_auto_schedule: channel.pool_auto_schedule ?? channel.poolAutoSchedule ?? true,
       },
     });

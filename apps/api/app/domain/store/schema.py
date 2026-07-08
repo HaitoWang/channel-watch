@@ -123,6 +123,9 @@ class SchemaMixin:
             # 号池自动调度（Pool Auto Scheduler）——上游 channel 映射到我方 sub2api 号池账号
             self.ensure_column(conn, "channels", "pool_account_ids", "TEXT")
             self.ensure_column(conn, "channels", "pool_rate_threshold", "REAL")
+            self.ensure_column(conn, "channels", "pool_sell_rate", "REAL")
+            self.ensure_column(conn, "channels", "pool_target_margin", "REAL")
+            self.ensure_column(conn, "channels", "pool_last_priority", "INTEGER")
             self.ensure_column(conn, "channels", "pool_auto_schedule", "INTEGER NOT NULL DEFAULT 1")
             self.ensure_column(conn, "channels", "pool_desired_state", "TEXT")
             self.ensure_column(conn, "channels", "pool_last_pushed_state", "TEXT")

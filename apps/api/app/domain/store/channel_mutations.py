@@ -274,6 +274,10 @@ class ChannelMutationMixin:
             "poolRateThreshold": "pool_rate_threshold",
             "pool_auto_schedule": "pool_auto_schedule",
             "poolAutoSchedule": "pool_auto_schedule",
+            "pool_sell_rate": "pool_sell_rate",
+            "poolSellRate": "pool_sell_rate",
+            "pool_target_margin": "pool_target_margin",
+            "poolTargetMargin": "pool_target_margin",
         }
         assignments: list[str] = []
         params: list[Any] = []
@@ -285,7 +289,7 @@ class ChannelMutationMixin:
             value = payload[key]
             if column == "base_url":
                 value = normalize_base_url(value)
-            elif column in {"threshold", "rate_multiplier", "pool_rate_threshold"}:
+            elif column in {"threshold", "rate_multiplier", "pool_rate_threshold", "pool_sell_rate", "pool_target_margin"}:
                 value = optional_float(value)
             elif column == "pool_account_ids":
                 value = ",".join(parse_account_ids(value)) or None
@@ -350,7 +354,6 @@ class ChannelMutationMixin:
                 """
                 UPDATE channels
                 SET is_enabled = 0,
-                    is_monitoring = 0,
                     scheduling_disabled_reason = ?,
                     updated_at = ?
                 WHERE id = ?

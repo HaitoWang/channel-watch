@@ -94,13 +94,13 @@ class ProbeServiceMixin:
         return summary
 
     def rate_probe_channel_ids(self) -> list[int]:
+        # 倍率探测覆盖所有渠道（含已停止调度的）：禁用调度不等于停止监控
         with self.connect() as conn:
             rows = conn.execute(
                 f"""
                 SELECT c.id
                 FROM channels c
-                WHERE c.is_enabled = 1
-                  AND {self.active_channel_filter}
+                WHERE {self.active_channel_filter}
                 ORDER BY c.id
                 """
             ).fetchall()
@@ -460,6 +460,10 @@ class ProbeServiceMixin:
         else:
             self.resolve_event(channel_id, "low_balance")
         self.resolve_event(channel_id, "probe_failed")
+        try:
+            self.maybe_burnout_warning(channel_id, self.get_channel_row(channel_id) or row, notify=notify)
+        except Exception:  # noqa: BLE001 —— 预测失败不影响探测
+            pass
         self.maybe_pool_schedule(channel_id, notify=notify)
 
     def _record_probe_failure(self, channel_id: int, row: sqlite3.Row, message: str, *, kind: str = "balance") -> None:

@@ -97,18 +97,22 @@ export function ChannelModal({
             <span>预警阈值</span>
             <input name="threshold" type="number" step="0.01" defaultValue={channel.threshold ?? "10"} min="0" />
           </label>
-          <label>
-            <span>分组 ID</span>
-            <input name="group_id" placeholder="可选" autoComplete="off" defaultValue={channel.group_id || channel.groupId || ""} />
-          </label>
+          {isEdit ? (
+            <label>
+              <span>分组 ID</span>
+              <input name="group_id" placeholder="可选" autoComplete="off" defaultValue={channel.group_id || channel.groupId || ""} />
+            </label>
+          ) : null}
           <label>
             <span>模型范围</span>
             <input name="model_scope" defaultValue={channel.model_scope || channel.modelScope || "All models"} autoComplete="off" />
           </label>
-          <label>
-            <span>关联父账号 ID</span>
-            <input name="source_channel_id" placeholder="可选，填父账号 ID 创建子 Key" autoComplete="off" defaultValue={channel.source_channel_id || channel.sourceChannelId || ""} />
-          </label>
+          {isEdit ? (
+            <label>
+              <span>关联父账号 ID</span>
+              <input name="source_channel_id" placeholder="可选，填父账号 ID 创建子 Key" autoComplete="off" defaultValue={channel.source_channel_id || channel.sourceChannelId || ""} />
+            </label>
+          ) : null}
           <label className="span-2">
             <span>登录校验 Token</span>
             <input name="turnstile_token" type="password" placeholder={isEdit ? "重新登录时可填" : "sub2Api 登录校验可选"} autoComplete="off" />
@@ -277,15 +281,39 @@ export function KeyModal({
             />
           </label>
           <label>
-            <span>倍率阈值（超过则倒挂禁用）</span>
+            <span>倍率阈值（覆盖，选填）</span>
             <input
               name="pool_rate_threshold"
               type="number"
               step="0.0001"
               min="0"
-              placeholder="留空则用全局默认"
+              placeholder="留空=用卖价/毛利自动算"
               value={draft.pool_rate_threshold ?? ""}
               onChange={(event) => onDraft({ pool_rate_threshold: event.target.value })}
+            />
+          </label>
+          <label>
+            <span>卖价倍率（覆盖，选填）</span>
+            <input
+              name="pool_sell_rate"
+              type="number"
+              step="0.0001"
+              min="0"
+              placeholder="留空=用全局卖价"
+              value={draft.pool_sell_rate ?? ""}
+              onChange={(event) => onDraft({ pool_sell_rate: event.target.value })}
+            />
+          </label>
+          <label>
+            <span>目标毛利率 %（覆盖，选填）</span>
+            <input
+              name="pool_target_margin"
+              type="number"
+              step="1"
+              min="0"
+              placeholder="留空=用全局毛利率"
+              value={draft.pool_target_margin ?? ""}
+              onChange={(event) => onDraft({ pool_target_margin: event.target.value })}
             />
           </label>
           <label className="check-row">

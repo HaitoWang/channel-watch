@@ -173,6 +173,10 @@ export function useRadarActions({ radar, loadRadar, notify, setLoadingIds, setSy
     };
     if (poolRateThreshold !== "") payload.pool_rate_threshold = Number(poolRateThreshold);
     else payload.pool_rate_threshold = null;
+    const poolSellRate = String(keyModal.draft.pool_sell_rate ?? "").trim();
+    payload.pool_sell_rate = poolSellRate !== "" ? Number(poolSellRate) : null;
+    const poolTargetMargin = String(keyModal.draft.pool_target_margin ?? "").trim();
+    payload.pool_target_margin = poolTargetMargin !== "" ? Number(poolTargetMargin) : null;
     if (!payload.name) {
       modals.setKeyMessage("Key 名称不能为空");
       return;

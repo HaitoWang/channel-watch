@@ -156,6 +156,12 @@ function AccountRow({
         </span>
         <span>默认 Key: {defaultChildId ? `#${defaultChildId}` : "未设置"}</span>
         <span>余额探测: {formatTime(account.last_checked_at || account.lastCheckedAt)}</span>
+        {(() => {
+          const burn = account.pool_burn_hours ?? account.poolBurnHours;
+          if (burn === null || burn === undefined) return null;
+          const cls = burn <= 6 ? "bad" : burn <= 24 ? "warn" : "good";
+          return <span className={`badge ${cls}`} title="按消耗速率预测">⏳ 约 {burn}h 耗尽</span>;
+        })()}
       </div>
       <div className="usage-block">
         <div className="usage-label">
@@ -266,7 +272,10 @@ function KeyRow({
           类型: {provider.label} · 模型: {models.join(", ") || "未配置"}
         </span>
         <span>{lastLine}</span>
-        <PoolScheduleBadge account={channel} />
+        <span className="pool-badge">
+          <PoolScheduleBadge account={channel} />
+          <PoolMarginBadge channel={channel} />
+        </span>
       </div>
       <div className="row-actions">
         <button className={`ghost-button ${monitoring ? "" : "is-muted"}`} type="button" onClick={() => onToggleMonitor(channel)}>
@@ -321,4 +330,12 @@ function PoolScheduleBadge({ account }: { account: AnyRecord }) {
       {error ? <span className="badge bad">下发失败</span> : null}
     </span>
   );
+}
+
+/** 展示某 Key 的当前毛利率徽章：绿=健康 / 黄=偏低 / 红=倒挂。 */
+function PoolMarginBadge({ channel }: { channel: AnyRecord }) {
+  const margin = channel.pool_current_margin ?? channel.poolCurrentMargin;
+  if (margin === null || margin === undefined) return null;
+  const cls = margin <= 0 ? "bad" : margin < 10 ? "warn" : "good";
+  return <span className={`badge ${cls}`} title="当前毛利率">毛利 {margin}%</span>;
 }

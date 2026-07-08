@@ -92,13 +92,13 @@ class ChannelReadMixin:
         return accounts
 
     def enabled_channel_ids(self) -> list[int]:
+        # 余额探测覆盖所有父账号（含已停止调度的）：禁用调度不等于停止监控
         with self.connect() as conn:
             rows = conn.execute(
                 """
                 SELECT c.id
                 FROM channels c
-                WHERE c.is_enabled = 1
-                  AND c.source_channel_id IS NULL
+                WHERE c.source_channel_id IS NULL
                 ORDER BY c.id
                 """
             ).fetchall()

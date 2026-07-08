@@ -97,31 +97,97 @@ class NotificationContentMixin:
             lines.append(f"- 另有 {len(parts) - 5} 条失败")
         return lines
 
-    def notification_brief(self, event: dict[str, Any]) -> str:
-        """即时推送文案（QQBot 等）：带 emoji、按类型给出具体数值和处置建议。
+    def _fmt_num(self, value: Any, digits: int = 2) -> str:
+        """数字格式化：保留至多 digits 位小数，去掉无意义尾随 0。"""
+        try:
+            f = float(value)
+        except (TypeError, ValueError):
+            return str(value or "")
+        s = f"{f:.{digits}f}".rstrip("0").rstrip(".")
+        return s or "0"
 
-        - 余额低：🔴 渠道-Key: 余额剩余 X USD，请尽快充值
-        - 倍率变动：📈 渠道-Key: 倍率 A > B，注意切换避免损失。
-        - 模型异常：🚨 渠道-Key: <模型>, 模型请求异常！注意查看
-        """
+    def notification_brief(self, event: dict[str, Any]) -> str:
+        """即时推送文案（QQBot 等）：统一的多行卡片格式，带 emoji、数值规整、含处置建议。"""
         name = self.notification_key_display_name(event)
         event_type = str(event.get("type") or "")
         message = str(event.get("message") or "")
 
         if event_type == "low_balance":
-            current, _threshold = self.low_balance_values(message)
-            remain = current or self.low_balance_remaining_text(message) or "不足"
-            return f"🔴 {name}: 余额剩余 {remain}，请尽快充值"
+            m = re.search(r"当前余额\s*([-\d.]+)\s*(\S+?)[，,]", message)
+            amount = self._fmt_num(m.group(1)) if m else ""
+            unit = m.group(2) if m else "USD"
+            try:
+                num = float(m.group(1)) if m else 0.0
+            except (TypeError, ValueError):
+                num = 0.0
+            if not m:
+                bal_line = "余额不足"
+            elif num <= 0:
+                bal_line = f"已欠费 {self._fmt_num(abs(num))} {unit}"
+            else:
+                bal_line = f"剩余 {amount} {unit}"
+            return "\n".join([
+                "🔴 余额不足",
+                f"🏷 {name}",
+                f"💰 {bal_line}",
+                "💡 请尽快充值",
+            ])
+
+        if event_type == "balance_burnout":
+            hm = re.search(r"预计\s*([\d.]+)\s*小时", message)
+            cm = re.search(r"当前\s*([-\d.]+)\s*(\S+?)[，,]", message)
+            hours = self._fmt_num(hm.group(1), 1) if hm else "很快"
+            lines = ["⏳ 余额将耗尽", f"🏷 {name}"]
+            if cm:
+                lines.append(f"💰 剩余 {self._fmt_num(cm.group(1))} {cm.group(2)}")
+            lines.append(f"⏱ 预计 {hours} 小时后耗尽")
+            lines.append("💡 建议提前充值")
+            return "\n".join(lines)
 
         if event_type == "rate_changed":
             previous, current = self.rate_change_values(message)
-            return f"📈 {name}: 倍率 {previous or '?'} > {current or '?'}，注意切换避免损失。"
+            trend = ""
+            try:
+                trend = " ↑" if float(current) > float(previous) else " ↓"
+            except (TypeError, ValueError):
+                trend = ""
+            return "\n".join([
+                "📈 倍率变动",
+                f"🏷 {name}",
+                f"⚙️ {self._fmt_num(previous, 4)} → {self._fmt_num(current, 4)}{trend}",
+                "💡 注意切换，避免损失",
+            ])
 
         if event_type == "model_probe_failed":
             models = self.model_failure_models(message)
-            return f"🚨 {name}: {models}，模型请求异常！注意查看"
+            return "\n".join([
+                "🚨 模型异常",
+                f"🏷 {name}",
+                f"🤖 {models}",
+                "💡 请检查上游可用性",
+            ])
 
-        return f"⚠️ {name}: {self.notification_event_label(event_type)}"
+        if event_type == "pool_scheduled":
+            # message 形如「已启用号池账号 [9]。原因：...」
+            enabled = "启用" in message.split("原因", 1)[0]
+            emoji = "🟢" if enabled else "🔴"
+            action = "已启用调度" if enabled else "已停止调度"
+            reason = message.split("原因：", 1)[1].strip("。") if "原因：" in message else ""
+            lines = [f"{emoji} 号池{action}", f"🏷 {name}"]
+            if reason:
+                lines.append(f"📋 {reason}")
+            return "\n".join(lines)
+
+        if event_type == "pool_schedule_failed":
+            detail = message.split("：", 1)[1] if "：" in message else message
+            return "\n".join([
+                "⚠️ 号池调度下发失败",
+                f"🏷 {name}",
+                f"📋 {detail.strip()[:80]}",
+                "💡 请检查号池连接",
+            ])
+
+        return f"⚠️ {name}：{self.notification_event_label(event_type)}"
 
     def model_failure_models(self, message: str) -> str:
         """从模型失败详情里提取出错的模型名，用 / 连接（如 gpt-5.5/claude）。"""
